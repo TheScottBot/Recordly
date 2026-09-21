@@ -26,6 +26,12 @@ were cleared at which commit.
 - `parseCursorTelemetrySidecar` is the read from disk boundary for the
   sidecar; `get-cursor-telemetry` uses it and returns a failure with the
   rejection reason instead of silently loading an unknown version.
+- `src/components/video-editor/timeline/typingBurstUtils.ts` groups
+  keystroke samples into typing bursts and gives a burst the focus of the
+  left or double click that preceded it within 2500 ms, or no focus at all.
+  Not yet wired into zoom suggestions.
+- `src/components/video-editor/timeline/timeGapClustering.ts` is the gap
+  clustering rule shared by click clusters and typing bursts.
 
 ### Added
 
