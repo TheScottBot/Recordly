@@ -7,6 +7,17 @@ export interface RecordingPreferencesPatch {
 	systemAudioEnabled?: boolean;
 	webcamEnabled?: boolean;
 	webcamDeviceId?: string;
+	/** Off unless exactly true: the application captured no keyboard data before this preference existed. */
+	keyboardCaptureEnabled?: boolean;
+}
+
+/**
+ * Reads the keyboard capture preference the way the interaction hook gates on
+ * it. Anything but the boolean true is off, so a malformed or absent value
+ * never registers a keyboard listener.
+ */
+export function readKeyboardCaptureEnabled(preferences: Record<string, unknown>): boolean {
+	return preferences.keyboardCaptureEnabled === true;
 }
 
 export function createRecordingPreferencesStore(filePath: string) {

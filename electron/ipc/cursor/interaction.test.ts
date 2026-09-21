@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
 	app: {
@@ -11,10 +11,39 @@ vi.mock("electron", () => ({
 	},
 }));
 
+// The keyboard capture tests write a real sidecar into a temporary directory,
+// so the path the writer resolves is set per test through this holder.
+const telemetryPathHolder = vi.hoisted(() => ({ path: "/tmp/recording.cursor.json" }));
+
+vi.mock("../utils", () => ({
+	getTelemetryPathForVideo: vi.fn(() => telemetryPathHolder.path),
+	getScreen: vi.fn(() => ({
+		getCursorScreenPoint: () => ({ x: 50, y: 50 }),
+		getPrimaryDisplay: () => ({ scaleFactor: 1 }),
+		getDisplayNearestPoint: () => ({ bounds: { x: 0, y: 0, width: 100, height: 100 } }),
+		getAllDisplays: () => [],
+	})),
+}));
+
+import {
+	activeCursorSamples,
+	setActiveCursorSamples,
+	setCursorCaptureStartTimeMs,
+	setIsCursorCaptureActive,
+} from "../state";
+import { createFakeUiohookModule } from "./fakeUiohookModule";
 import {
 	repairBundledUiohookBinaryForCurrentArch,
 	shouldStartGlobalInteractionHook,
+	startInteractionCapture,
+	stopInteractionCapture,
 } from "./interaction";
+import {
+	pauseCursorCapture,
+	resetCursorCaptureClock,
+	resumeCursorCapture,
+	writeCursorTelemetry,
+} from "./telemetry";
 
 describe("shouldStartGlobalInteractionHook", () => {
 	it("does not start the synchronous uiohook event tap on macOS", () => {
@@ -88,5 +117,159 @@ describe("repairBundledUiohookBinaryForCurrentArch", () => {
 
 		expect(repaired).toBe(false);
 		expect(await fs.readFile(buildPath, "utf8")).toBe("existing-build");
+	});
+});
+
+describe("keyboard capture through the global interaction hook", () => {
+	const CAPTURE_STARTED_AT_MS = 10_000;
+	// Distinctive numbers, so a leaked keycode is recognisable wherever it lands.
+	const FAKE_KEY_TABLE = { A: 7_301, Space: 7_357, Ctrl: 7_329, ArrowLeft: 7_419 };
+	const FAKE_HOOK_TIME = 987_654;
+	const LEAKED_KEY_IDENTITY =
+		/7301|7357|7329|7419|987654|keycode|shiftKey|altKey|ctrlKey|metaKey|"time"/;
+	const tempRoots: string[] = [];
+
+	beforeEach(() => {
+		vi.useFakeTimers({ now: CAPTURE_STARTED_AT_MS });
+		setIsCursorCaptureActive(true);
+		setActiveCursorSamples([]);
+		setCursorCaptureStartTimeMs(CAPTURE_STARTED_AT_MS);
+		resetCursorCaptureClock();
+	});
+
+	afterEach(async () => {
+		stopInteractionCapture();
+		setIsCursorCaptureActive(false);
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		await Promise.all(
+			tempRoots
+				.splice(0)
+				.map((tempRoot) => fs.rm(tempRoot, { recursive: true, force: true })),
+		);
+	});
+
+	async function startCaptureWithFakeHook(keyboardCaptureEnabled: boolean | undefined) {
+		const fakeModule = createFakeUiohookModule(FAKE_KEY_TABLE);
+		await startInteractionCapture({
+			platform: "win32",
+			keyboardCaptureEnabled,
+			loadModuleNamespace: () => fakeModule.namespace,
+		});
+		return fakeModule;
+	}
+
+	it("registers no keyboard listener when keyboard capture is off, which is the default", async () => {
+		const fakeModuleWithDefault = await startCaptureWithFakeHook(undefined);
+		expect(fakeModuleWithDefault.registeredEventNames()).toEqual(["mousedown", "mouseup"]);
+		stopInteractionCapture();
+
+		const fakeModuleWithExplicitOff = await startCaptureWithFakeHook(false);
+		expect(fakeModuleWithExplicitOff.registeredEventNames()).toEqual(["mousedown", "mouseup"]);
+	});
+
+	it("registers a keydown listener beside the mouse listeners only when keyboard capture is on", async () => {
+		const fakeModule = await startCaptureWithFakeHook(true);
+
+		expect(fakeModule.registeredEventNames()).toEqual(["mousedown", "mouseup", "keydown"]);
+		expect(fakeModule.startCallCount).toBe(1);
+	});
+
+	it("removes the keydown listener and stops the hook on cleanup", async () => {
+		const fakeModule = await startCaptureWithFakeHook(true);
+
+		stopInteractionCapture();
+
+		expect(fakeModule.registeredEventNames()).toEqual([]);
+		expect(fakeModule.stopCallCount).toBe(1);
+	});
+
+	it("records a keystroke sample carrying only the time, the pointer position and the character flag", async () => {
+		const fakeModule = await startCaptureWithFakeHook(true);
+		vi.setSystemTime(CAPTURE_STARTED_AT_MS + 500);
+
+		fakeModule.emit("keydown", {
+			keycode: FAKE_KEY_TABLE.A,
+			altKey: false,
+			time: FAKE_HOOK_TIME,
+		});
+		fakeModule.emit("keydown", {
+			keycode: FAKE_KEY_TABLE.Ctrl,
+			ctrlKey: true,
+			time: FAKE_HOOK_TIME,
+		});
+
+		expect(activeCursorSamples).toHaveLength(2);
+		const [characterSample, modifierSample] = activeCursorSamples;
+		expect(characterSample).toEqual({
+			timeMs: 500,
+			cx: 0.5,
+			cy: 0.5,
+			interactionType: "keystroke",
+			cursorType: undefined,
+			keyProducesCharacter: true,
+		});
+		expect(modifierSample.keyProducesCharacter).toBe(false);
+		for (const sample of activeCursorSamples) {
+			expect(Object.keys(sample).sort()).toEqual(
+				[
+					"cursorType",
+					"cx",
+					"cy",
+					"interactionType",
+					"keyProducesCharacter",
+					"timeMs",
+				].sort(),
+			);
+		}
+	});
+
+	it("does not record a keystroke when capture is inactive or paused", async () => {
+		const fakeModule = await startCaptureWithFakeHook(true);
+
+		pauseCursorCapture(CAPTURE_STARTED_AT_MS + 100);
+		fakeModule.emit("keydown", { keycode: FAKE_KEY_TABLE.A });
+		expect(activeCursorSamples).toHaveLength(0);
+
+		resumeCursorCapture(CAPTURE_STARTED_AT_MS + 300);
+		setIsCursorCaptureActive(false);
+		fakeModule.emit("keydown", { keycode: FAKE_KEY_TABLE.A });
+		expect(activeCursorSamples).toHaveLength(0);
+	});
+
+	it("stamps keystrokes with the capture clock, so paused time is excluded", async () => {
+		const fakeModule = await startCaptureWithFakeHook(true);
+
+		pauseCursorCapture(CAPTURE_STARTED_AT_MS + 200);
+		resumeCursorCapture(CAPTURE_STARTED_AT_MS + 700);
+		vi.setSystemTime(CAPTURE_STARTED_AT_MS + 1_000);
+		fakeModule.emit("keydown", { keycode: FAKE_KEY_TABLE.Space });
+
+		expect(activeCursorSamples.map((sample) => sample.timeMs)).toEqual([500]);
+	});
+
+	it("writes a sidecar in which nothing derived from key identity appears", async () => {
+		const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "recordly-keystroke-"));
+		tempRoots.push(tempRoot);
+		telemetryPathHolder.path = path.join(tempRoot, "recording.cursor.json");
+		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+		const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const fakeModule = await startCaptureWithFakeHook(true);
+
+		for (const keycode of [FAKE_KEY_TABLE.A, FAKE_KEY_TABLE.Space, FAKE_KEY_TABLE.ArrowLeft]) {
+			vi.setSystemTime(Date.now() + 100);
+			fakeModule.emit("keydown", { keycode, time: FAKE_HOOK_TIME, shiftKey: true });
+		}
+		await writeCursorTelemetry(path.join(tempRoot, "recording.mp4"), activeCursorSamples);
+
+		const writtenSidecar = await fs.readFile(telemetryPathHolder.path, "utf8");
+		expect(writtenSidecar).not.toMatch(LEAKED_KEY_IDENTITY);
+		for (const sample of JSON.parse(writtenSidecar).samples) {
+			expect(Object.keys(sample).sort()).toEqual(
+				["cx", "cy", "interactionType", "keyProducesCharacter", "timeMs"].sort(),
+			);
+		}
+		const everyLoggedArgument = [...consoleLog.mock.calls, ...consoleWarn.mock.calls].flat();
+		expect(JSON.stringify(everyLoggedArgument)).not.toMatch(LEAKED_KEY_IDENTITY);
 	});
 });

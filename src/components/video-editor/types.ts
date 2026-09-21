@@ -16,29 +16,7 @@ export interface ZoomRegion {
 	mode?: ZoomMode;
 }
 
-export interface CursorTelemetryPoint {
-	timeMs: number;
-	cx: number;
-	cy: number;
-	pressure?: number;
-	interactionType?:
-		| "move"
-		| "click"
-		| "double-click"
-		| "right-click"
-		| "middle-click"
-		| "mouseup";
-	cursorType?:
-		| "arrow"
-		| "text"
-		| "pointer"
-		| "crosshair"
-		| "open-hand"
-		| "closed-hand"
-		| "resize-ew"
-		| "resize-ns"
-		| "not-allowed";
-}
+export type { CursorTelemetryPoint } from "@/lib/cursorTelemetryContract";
 
 export interface CursorVisualSettings {
 	size: number;

@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRecordingPreferencesStore } from "./recordingPreferencesStore";
+import {
+	createRecordingPreferencesStore,
+	readKeyboardCaptureEnabled,
+} from "./recordingPreferencesStore";
 
 vi.mock("electron", () => ({
 	app: {
@@ -42,5 +45,31 @@ describe("recording preferences store", () => {
 			webcamEnabled: true,
 			webcamDeviceId: "preferred-camera",
 		});
+	});
+});
+
+describe("keyboard capture preference", () => {
+	it("is off unless the stored value is exactly true", () => {
+		expect(readKeyboardCaptureEnabled({})).toBe(false);
+		expect(readKeyboardCaptureEnabled({ keyboardCaptureEnabled: false })).toBe(false);
+		expect(readKeyboardCaptureEnabled({ keyboardCaptureEnabled: "true" })).toBe(false);
+		expect(readKeyboardCaptureEnabled({ keyboardCaptureEnabled: 1 })).toBe(false);
+		expect(readKeyboardCaptureEnabled({ keyboardCaptureEnabled: true })).toBe(true);
+	});
+
+	it("round trips through the store beside the existing preferences", async () => {
+		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "recordly-preferences-"));
+		temporaryDirectories.push(directory);
+		const store = createRecordingPreferencesStore(path.join(directory, "recording.json"));
+
+		await store.update({ microphoneEnabled: true });
+		await store.update({ keyboardCaptureEnabled: true });
+
+		const stored = await store.read();
+		expect(stored).toEqual({ microphoneEnabled: true, keyboardCaptureEnabled: true });
+		expect(readKeyboardCaptureEnabled(stored)).toBe(true);
+
+		await store.update({ keyboardCaptureEnabled: false });
+		expect(readKeyboardCaptureEnabled(await store.read())).toBe(false);
 	});
 });

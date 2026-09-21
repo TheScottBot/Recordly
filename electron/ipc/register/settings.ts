@@ -3,11 +3,9 @@ import { app, ipcMain } from "electron";
 import { hasAppSetting, readAppSettingsStore, writeAppSettingsStore } from "../../appSettingsStore";
 import { hideCursor } from "../../cursorHider";
 import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from "../../windows";
-import { COUNTDOWN_SETTINGS_FILE, RECORDINGS_SETTINGS_FILE, SHORTCUTS_FILE } from "../constants";
-import {
-	createRecordingPreferencesStore,
-	type RecordingPreferencesPatch,
-} from "../settings/recordingPreferencesStore";
+import { COUNTDOWN_SETTINGS_FILE, SHORTCUTS_FILE } from "../constants";
+import type { RecordingPreferencesPatch } from "../settings/recordingPreferencesStore";
+import { sharedRecordingPreferencesStore } from "../settings/sharedRecordingPreferencesStore";
 import {
 	countdownCancelled,
 	countdownInProgress,
@@ -22,7 +20,7 @@ import { parseJsonWithByteOrderMark } from "../utils";
 
 const BROWSER_MICROPHONE_PROFILE_ENV = "RECORDLY_BROWSER_MIC_PROFILE";
 const DEFAULT_BROWSER_MICROPHONE_PROFILE = "processed";
-const recordingPreferencesStore = createRecordingPreferencesStore(RECORDINGS_SETTINGS_FILE);
+const recordingPreferencesStore = sharedRecordingPreferencesStore;
 const BROWSER_MICROPHONE_PROFILES = new Set([
 	"processed",
 	"no-agc",

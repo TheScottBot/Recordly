@@ -21,9 +21,11 @@ import {
 import { ALLOW_RECORDLY_WINDOW_CAPTURE } from "../constants";
 import { startWindowBoundsCapture, stopWindowBoundsCapture } from "../cursor/bounds";
 import { startInteractionCapture, stopInteractionCapture } from "../cursor/interaction";
+import { readKeyboardCaptureEnabled } from "../settings/recordingPreferencesStore";
+import { sharedRecordingPreferencesStore } from "../settings/sharedRecordingPreferencesStore";
 import { startNativeCursorMonitor, stopNativeCursorMonitor } from "../cursor/monitor";
 import {
-	normalizeCursorTelemetrySamples,
+	parseCursorTelemetrySidecar,
 	pauseCursorCaptureAtBoundary,
 	persistPendingCursorTelemetry,
 	resetCursorCaptureClock,
@@ -1863,6 +1865,16 @@ export function registerRecordingHandlers(
 		}
 	});
 
+	// The keyboard preference is read at the moment capture starts, from the
+	// same store the launch window writes, so a recording started with the
+	// preference off registers no keyboard listener at all.
+	const startInteractionCaptureWithKeyboardPreference = async () => {
+		const preferences = await sharedRecordingPreferencesStore.read();
+		await startInteractionCapture({
+			keyboardCaptureEnabled: readKeyboardCaptureEnabled(preferences),
+		});
+	};
+
 	ipcMain.handle("set-recording-state", (_, recording: boolean) => {
 		if (recording) {
 			stopCursorCapture();
@@ -1878,7 +1890,7 @@ export function registerRecordingHandlers(
 			setLastLeftClick(null);
 			sampleCursorPoint();
 			startCursorSampling();
-			void startInteractionCapture();
+			void startInteractionCaptureWithKeyboardPreference();
 		} else {
 			setIsCursorCaptureActive(false);
 			stopCursorCapture();
@@ -1928,9 +1940,25 @@ export function registerRecordingHandlers(
 		try {
 			const content = await fs.readFile(telemetryPath, "utf-8");
 			const parsed = parseJsonWithByteOrderMark<unknown>(content);
-			const samples = normalizeCursorTelemetrySamples(parsed);
+			const sidecar = parseCursorTelemetrySidecar(parsed);
 
-			return { success: true, samples };
+			if (sidecar.status === "rejected") {
+				// Structured, and without the payload: the reason and the version are
+				// enough to diagnose, and the samples never reach a log line.
+				console.warn("[CursorTelemetry] Sidecar rejected", {
+					reason: sidecar.reason,
+					version: sidecar.version,
+					byteLength: content.length,
+				});
+				return {
+					success: false,
+					message: "Cursor telemetry sidecar rejected",
+					error: sidecar.reason,
+					samples: [],
+				};
+			}
+
+			return { success: true, samples: sidecar.samples };
 		} catch (error) {
 			const nodeError = error as NodeJS.ErrnoException;
 			if (nodeError.code === "ENOENT") {

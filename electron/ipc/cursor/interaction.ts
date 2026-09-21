@@ -13,10 +13,12 @@ import {
 } from "../state";
 import type {
 	CursorInteractionType,
+	HookKeyboardEvent,
 	HookMouseEvent,
 	UiohookLike,
 	UiohookModuleNamespace,
 } from "../types";
+import { buildCharacterProducingKeycodeSet } from "./keyboardCapture";
 import {
 	getCursorCaptureElapsedMs,
 	getHookCursorScreenPoint,
@@ -158,10 +160,9 @@ export function repairBundledUiohookBinaryForCurrentArch(
 	}
 }
 
-function loadUiohookModule() {
+function loadUiohookModuleNamespace(): UiohookModuleNamespace {
 	try {
-		const moduleExports = nodeRequire("uiohook-napi") as UiohookModuleNamespace;
-		return resolveUiohookModule(moduleExports);
+		return nodeRequire("uiohook-napi") as UiohookModuleNamespace;
 	} catch (error) {
 		if (!shouldRepairBundledUiohookBinary(error)) {
 			throw error;
@@ -172,8 +173,7 @@ function loadUiohookModule() {
 		}
 
 		delete nodeRequire.cache[nodeRequire.resolve("uiohook-napi")];
-		const moduleExports = nodeRequire("uiohook-napi") as UiohookModuleNamespace;
-		return resolveUiohookModule(moduleExports);
+		return nodeRequire("uiohook-napi") as UiohookModuleNamespace;
 	}
 }
 
@@ -233,24 +233,68 @@ export function recordCursorMouseUp() {
 	pushCursorSample(point.cx, point.cy, getCursorCaptureElapsedMs(), "mouseup");
 }
 
-export async function startInteractionCapture() {
+/**
+ * Records that a key was pressed: the capture clock time, where the pointer
+ * was, and whether the key produces a character. Nothing about which key.
+ * The pointer position is recorded so the sample sits on the rendered cursor
+ * path exactly where a mouseup sample would; a keystroke has no position of
+ * its own and the suggestion engine never treats this one as the focus.
+ */
+export function recordCursorKeystroke(keyProducesCharacter: boolean) {
+	if (!isCursorCaptureActive || isCursorCapturePaused()) {
+		return;
+	}
+
+	const point = getNormalizedCursorPoint();
+	if (!point) {
+		return;
+	}
+
+	pushCursorSample(
+		point.cx,
+		point.cy,
+		getCursorCaptureElapsedMs(),
+		"keystroke",
+		undefined,
+		keyProducesCharacter,
+	);
+}
+
+export interface StartInteractionCaptureOptions {
+	/** Defaults to the running platform; injectable so the gate is testable everywhere. */
+	platform?: NodeJS.Platform;
+	/** Off unless exactly true. When off, no keyboard listener is registered at all. */
+	keyboardCaptureEnabled?: boolean;
+	/** Defaults to loading `uiohook-napi`; injectable so tests can supply a fake hook. */
+	loadModuleNamespace?: () => UiohookModuleNamespace;
+}
+
+export async function startInteractionCapture(options: StartInteractionCaptureOptions = {}) {
+	const platform = options.platform ?? process.platform;
+	const keyboardCaptureEnabled = options.keyboardCaptureEnabled === true;
+	const loadModuleNamespace = options.loadModuleNamespace ?? loadUiohookModuleNamespace;
+
 	if (!isCursorCaptureActive) {
 		return;
 	}
 
-	if (!["darwin", "win32", "linux"].includes(process.platform)) {
+	if (!["darwin", "win32", "linux"].includes(platform)) {
 		return;
 	}
 
-	if (!shouldStartGlobalInteractionHook()) {
+	if (!shouldStartGlobalInteractionHook(platform)) {
 		console.warn("[CursorTelemetry] Skipping the blocking global interaction hook on macOS.");
 		return;
 	}
 
 	stopInteractionCapture();
 
+	// An absent optional subsystem is a fact in the log, not a mystery later.
+	console.log("[CursorTelemetry] Keyboard capture", { enabled: keyboardCaptureEnabled });
+
 	try {
-		const hook = loadUiohookModule();
+		const moduleNamespace = loadModuleNamespace();
+		const hook = resolveUiohookModule(moduleNamespace);
 		console.log(
 			"[CursorTelemetry] hook loaded:",
 			!!hook,
@@ -289,10 +333,25 @@ export async function startInteractionCapture() {
 			setLinuxCursorScreenPoint({ x: point.x, y: point.y, updatedAt: Date.now() });
 		};
 
+		// The keycode is read exactly once, here, to derive one boolean. The event
+		// object is not retained, logged or passed on: this callback is where
+		// keyboard data stops (specification 3.1).
+		const characterProducingKeycodes = buildCharacterProducingKeycodeSet(
+			moduleNamespace.UiohookKey,
+		);
+		const onKeyDown = (event: HookKeyboardEvent) => {
+			const keyProducesCharacter =
+				typeof event?.keycode === "number" && characterProducingKeycodes.has(event.keycode);
+			recordCursorKeystroke(keyProducesCharacter);
+		};
+
 		hook.on("mousedown", onMouseDown);
 		hook.on("mouseup", onMouseUp);
 		if (process.platform === "linux") {
 			hook.on("mousemove", onMouseMove);
+		}
+		if (keyboardCaptureEnabled) {
+			hook.on("keydown", onKeyDown);
 		}
 
 		setInteractionCaptureCleanup(() => {
@@ -303,11 +362,17 @@ export async function startInteractionCapture() {
 					if (process.platform === "linux") {
 						hook.off("mousemove", onMouseMove);
 					}
+					if (keyboardCaptureEnabled) {
+						hook.off("keydown", onKeyDown);
+					}
 				} else if (typeof hook.removeListener === "function") {
 					hook.removeListener("mousedown", onMouseDown);
 					hook.removeListener("mouseup", onMouseUp);
 					if (process.platform === "linux") {
 						hook.removeListener("mousemove", onMouseMove);
+					}
+					if (keyboardCaptureEnabled) {
+						hook.removeListener("keydown", onKeyDown);
 					}
 				}
 			} catch {

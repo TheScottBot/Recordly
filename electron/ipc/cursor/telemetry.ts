@@ -1,5 +1,9 @@
 import fs from "node:fs/promises";
 import {
+	isCursorInteractionType,
+	isSupportedCursorTelemetryVersion,
+} from "../../../src/lib/cursorTelemetryContract";
+import {
 	CURSOR_SAMPLE_INTERVAL_MS,
 	CURSOR_TELEMETRY_VERSION,
 	MAX_CURSOR_SAMPLES,
@@ -54,14 +58,15 @@ export function normalizeCursorTelemetrySamples(rawSamples: unknown): CursorTele
 					typeof point.cy === "number" && Number.isFinite(point.cy)
 						? clamp(point.cy, 0, 1)
 						: 0.5,
-				interactionType:
-					point.interactionType === "click" ||
-					point.interactionType === "double-click" ||
-					point.interactionType === "right-click" ||
-					point.interactionType === "middle-click" ||
-					point.interactionType === "move" ||
-					point.interactionType === "mouseup"
-						? point.interactionType
+				interactionType: isCursorInteractionType(point.interactionType)
+					? point.interactionType
+					: undefined,
+				// The character flag is meaningful only on a keystroke; anywhere else it
+				// is noise, and a non boolean is a malformed write that must not persist.
+				keyProducesCharacter:
+					point.interactionType === "keystroke" &&
+					typeof point.keyProducesCharacter === "boolean"
+						? point.keyProducesCharacter
 						: undefined,
 				cursorType:
 					point.cursorType === "arrow" ||
@@ -78,6 +83,48 @@ export function normalizeCursorTelemetrySamples(rawSamples: unknown): CursorTele
 			};
 		})
 		.sort((a, b) => a.timeMs - b.timeMs);
+}
+
+export type CursorTelemetrySidecarParseResult =
+	| { status: "ok"; version: number; samples: CursorTelemetryPoint[] }
+	| {
+			status: "rejected";
+			reason: "unsupported-version" | "malformed";
+			version?: unknown;
+			samples: [];
+	  };
+
+/**
+ * Reads a parsed sidecar file. Unlike `normalizeCursorTelemetrySamples`, which
+ * accepts in memory sample arrays from the renderer, this is the boundary for
+ * bytes read back from disk, so it refuses rather than guesses: an unknown
+ * version or a shape that is not `{ version, samples[] }` is rejected with a
+ * reason the caller can count and report.
+ */
+export function parseCursorTelemetrySidecar(parsed: unknown): CursorTelemetrySidecarParseResult {
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		return { status: "rejected", reason: "malformed", samples: [] };
+	}
+
+	const sidecar = parsed as { version?: unknown; samples?: unknown };
+	if (!Array.isArray(sidecar.samples)) {
+		return { status: "rejected", reason: "malformed", version: sidecar.version, samples: [] };
+	}
+
+	if (!isSupportedCursorTelemetryVersion(sidecar.version)) {
+		return {
+			status: "rejected",
+			reason: "unsupported-version",
+			version: sidecar.version,
+			samples: [],
+		};
+	}
+
+	return {
+		status: "ok",
+		version: sidecar.version as number,
+		samples: normalizeCursorTelemetrySamples(sidecar.samples),
+	};
 }
 
 export async function writeCursorTelemetry(videoPath: string, samples: unknown) {
@@ -243,6 +290,7 @@ export function pushCursorSample(
 	timeMs: number,
 	interactionType: CursorInteractionType = "move",
 	cursorType?: CursorVisualType,
+	keyProducesCharacter?: boolean,
 ) {
 	activeCursorSamples.push({
 		timeMs: Math.max(0, timeMs),
@@ -250,6 +298,8 @@ export function pushCursorSample(
 		cy,
 		interactionType,
 		cursorType: cursorType ?? currentCursorVisualType,
+		// Only a keystroke may carry the flag; the writer erases it anywhere else.
+		keyProducesCharacter: interactionType === "keystroke" ? keyProducesCharacter : undefined,
 	} as CursorTelemetryPoint);
 
 	if (activeCursorSamples.length > MAX_CURSOR_SAMPLES) {

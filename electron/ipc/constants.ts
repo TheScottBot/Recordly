@@ -26,6 +26,6 @@ export const COMPANION_AUDIO_LAYOUTS = [
 	{ platform: "mac" as const, systemSuffix: ".system.webm", micSuffix: ".mic.webm" },
 ];
 
-export const CURSOR_TELEMETRY_VERSION = 2;
+export { CURSOR_TELEMETRY_VERSION } from "../../src/lib/cursorTelemetryContract";
 export const CURSOR_SAMPLE_INTERVAL_MS = 33;
 export const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz

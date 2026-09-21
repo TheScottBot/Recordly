@@ -1,0 +1,96 @@
+# Privacy
+
+What Recordly collects on your machine while it records, what it does not,
+how long it keeps it, and what it cannot protect you from. Recordly is a
+desktop application; nothing described here leaves your computer unless you
+export or share a file yourself.
+
+## The recording itself
+
+A screen recording is a video of whatever was on the captured screen or
+window, with microphone, system audio and webcam if you turned them on. It
+contains everything visible, including anything you type into any
+application while recording. That is the nature of a screen recording and
+no setting changes it.
+
+## Cursor telemetry
+
+Beside every recording Recordly writes a sidecar file, `<recording>.cursor.json`,
+so the editor can smooth the cursor, animate clicks and suggest zooms. It
+holds, roughly thirty times a second:
+
+- the time since the recording started
+- the pointer position, as a fraction of the captured area
+- whether that sample was a click, a double click, a right or middle click,
+  a mouse release, a plain move, or, if keyboard capture is on, a key press
+- the cursor shape at the time (arrow, text, pointer, and so on)
+
+It never holds what was on screen or what was typed.
+
+## Keyboard capture
+
+Off by default. Recordly captured no keyboard data before this setting
+existed, and turning it on is your choice.
+
+When it is on, each key press adds one sample to the cursor telemetry
+carrying:
+
+- the time since the recording started
+- where the pointer was at that moment
+- one yes or no: whether the key normally produces a character (a letter,
+  digit, space, punctuation mark, Enter, Backspace or Delete) rather than
+  being a modifier, arrow, function or lock key
+
+That is all. Recordly does not record which key was pressed, what character
+it produced, which modifiers were held, or anything from which the text you
+typed could be reconstructed. The key's identity is read once, inside the
+capture callback, to produce that single yes or no, and is then discarded.
+It is never written to the sidecar, a log line, a crash report or a
+diagnostic bundle. A test asserts this on every change.
+
+The purpose is timing only: a burst of key presses tells the editor that you
+were typing, so it can suggest a zoom onto the field you had clicked into.
+
+### What turning it off means
+
+When keyboard capture is off, Recordly registers no keyboard listener at all.
+It is not the case that key presses are collected and thrown away later;
+they are never collected.
+
+One honest limitation: on Windows and Linux, the library Recordly uses for
+click detection (`uiohook-napi`) delivers every input event, keyboard
+included, to Recordly's main process whenever a recording is in progress.
+That has been true since Recordly first shipped click detection and does not
+depend on this setting. With keyboard capture off, Recordly listens to none
+of those keyboard events; they arrive and are dropped by the library's own
+event emitter because nothing subscribed. Recordly cannot stop the library
+delivering them without patching it.
+
+On macOS the global input library is not used at all (it can freeze the
+application), and keyboard capture is not yet available there.
+
+### Where the setting lives
+
+At this stage of the work there is no on screen control yet; one is being
+added. The value is `keyboardCaptureEnabled` in `recordings-settings.json`
+in Recordly's user data folder, and only the exact value `true` turns
+capture on. Anything else, including the key being absent, means off.
+
+## Retention
+
+The sidecar lives next to its recording, in your recordings folder, for as
+long as the recording does. Recordly can delete only its own automatic
+recordings from inside the application, and when it does it deletes the
+sidecar with them; the same happens when old automatic recordings are pruned.
+If you delete a recording file yourself, the sidecar stays until you delete
+it too. Nothing is uploaded.
+
+## What this cannot protect against
+
+If you type a password, a private message or anything else sensitive while
+recording, the recording contains a video of you doing it, whether or not
+keyboard capture is on. With keyboard capture on, the editor may also suggest
+a zoom onto the field you were typing into, because it cannot tell a
+password field from any other field and does not try to. Review a recording
+before sharing it, and pause the recording before typing anything you would
+not want on screen.

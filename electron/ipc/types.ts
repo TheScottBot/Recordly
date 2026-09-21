@@ -79,32 +79,13 @@ export type SystemCursorAsset = {
 	height: number;
 };
 
-export type CursorVisualType =
-	| "arrow"
-	| "text"
-	| "pointer"
-	| "crosshair"
-	| "open-hand"
-	| "closed-hand"
-	| "resize-ew"
-	| "resize-ns"
-	| "not-allowed";
-
-export type CursorInteractionType =
-	| "move"
-	| "click"
-	| "double-click"
-	| "right-click"
-	| "middle-click"
-	| "mouseup";
-
-export interface CursorTelemetryPoint {
-	timeMs: number;
-	cx: number;
-	cy: number;
-	interactionType?: CursorInteractionType;
-	cursorType?: CursorVisualType;
-}
+// The cursor telemetry grammar is declared once, in a module both trees import,
+// so the union here and the runtime allowlist in cursor/telemetry.ts cannot drift.
+export type {
+	CursorInteractionType,
+	CursorTelemetryPoint,
+	CursorVisualType,
+} from "../../src/lib/cursorTelemetryContract";
 
 export type NativeMacWindowSource = {
 	id: string;
@@ -120,7 +101,7 @@ export type NativeMacWindowSource = {
 	height?: number;
 };
 
-export type HookEventName = "mousedown" | "mouseup" | "mousemove";
+export type HookEventName = "mousedown" | "mouseup" | "mousemove" | "keydown";
 
 export type HookMouseEvent = {
 	button?: number;
@@ -139,7 +120,17 @@ export type HookMouseEvent = {
 	};
 };
 
-export type HookEventListener = (event: HookMouseEvent) => void;
+/**
+ * The keyboard event as uiohook-napi 1.5.4 delivers it. Only `keycode` is
+ * declared because only `keycode` may be read, once, inside the callback, to
+ * derive the character producing boolean. The modifier flags and the hook's
+ * own timestamp are deliberately not modelled so nothing can read them.
+ */
+export type HookKeyboardEvent = {
+	keycode?: number;
+};
+
+export type HookEventListener = (event: HookMouseEvent & HookKeyboardEvent) => void;
 
 export type UiohookLike = {
 	on: (eventName: HookEventName, listener: HookEventListener) => void;
@@ -151,6 +142,8 @@ export type UiohookLike = {
 
 export type UiohookModuleNamespace = {
 	uIOhook?: UiohookLike;
+	/** The key name to keycode table, read only to classify keys by name. */
+	UiohookKey?: Record<string, unknown>;
 	uiohook?: UiohookLike;
 	Uiohook?: UiohookLike;
 	default?: UiohookLike | UiohookModuleNamespace;

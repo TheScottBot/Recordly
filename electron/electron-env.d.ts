@@ -945,29 +945,7 @@ interface ProcessedDesktopSource {
 	windowTitle?: string;
 }
 
-interface CursorTelemetryPoint {
-	timeMs: number;
-	cx: number;
-	cy: number;
-	pressure?: number;
-	interactionType?:
-		| "move"
-		| "click"
-		| "double-click"
-		| "right-click"
-		| "middle-click"
-		| "mouseup";
-	cursorType?:
-		| "arrow"
-		| "text"
-		| "pointer"
-		| "crosshair"
-		| "open-hand"
-		| "closed-hand"
-		| "resize-ew"
-		| "resize-ns"
-		| "not-allowed";
-}
+type CursorTelemetryPoint = import("../src/lib/cursorTelemetryContract").CursorTelemetryPoint;
 
 interface SystemCursorAsset {
 	dataUrl: string;
