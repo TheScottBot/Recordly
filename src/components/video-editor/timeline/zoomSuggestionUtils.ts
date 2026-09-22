@@ -1,4 +1,9 @@
 import type { CursorTelemetryPoint, ZoomFocus } from "../types";
+import { clusterByTimeGap } from "./timeGapClustering";
+import { buildTypingBurstCandidates, type TypingBurstCandidate } from "./typingBurstUtils";
+import { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionConstants";
+
+export { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionConstants";
 
 export const MIN_DWELL_DURATION_MS = 450;
 export const MAX_DWELL_DURATION_MS = 2600;
@@ -35,9 +40,24 @@ export type InteractionZoomSuggestionStatus =
 	| "no-interactions"
 	| "no-slots";
 
+/**
+ * What the typing path did, present only when the telemetry held keystroke
+ * samples so that a recording with no typing returns exactly what it always
+ * has. `burstsLimitedByClick` counts bursts whose extension was cut short or
+ * dropped because a click cluster or a reserved span was in the way: the
+ * click's own region always wins.
+ */
+export interface TypingSuggestionSummary {
+	burstsDetected: number;
+	burstsApplied: number;
+	burstsDeclinedForFocus: number;
+	burstsLimitedByClick: number;
+}
+
 export interface InteractionZoomSuggestionResult {
 	status: InteractionZoomSuggestionStatus;
 	suggestions: SuggestedZoomRegion[];
+	typing?: TypingSuggestionSummary;
 }
 
 export function shouldAutoApplyFreshRecordingZoomsForSource(
@@ -67,10 +87,6 @@ export function shouldAutoApplyFreshRecordingZoomsForSource(
 	);
 }
 
-/** Max gap between consecutive clicks before they are split into separate zoom clusters. */
-export const CLICK_CLUSTER_MERGE_GAP_MS = 2500;
-/** Padding added before the first click and after the last click in a cluster. */
-export const CLICK_CLUSTER_PAD_MS = 500;
 const EXPLICIT_CLICK_TYPES = new Set<NonNullable<CursorTelemetryPoint["interactionType"]>>([
 	"click",
 	"double-click",
@@ -88,13 +104,20 @@ function normalizeTelemetrySample(
 	sample: CursorTelemetryPoint,
 	totalMs: number,
 ): CursorTelemetryPoint {
-	return {
+	const normalized: CursorTelemetryPoint = {
 		timeMs: Math.max(0, Math.min(sample.timeMs, totalMs)),
 		cx: Math.max(0, Math.min(sample.cx, 1)),
 		cy: Math.max(0, Math.min(sample.cy, 1)),
 		interactionType: sample.interactionType,
 		cursorType: sample.cursorType,
 	};
+	// The character flag must survive normalisation or every keystroke would
+	// read as typing, modifiers and shortcuts included. Only set when present
+	// so click only samples keep exactly the shape they always had.
+	if (sample.keyProducesCharacter !== undefined) {
+		normalized.keyProducesCharacter = sample.keyProducesCharacter;
+	}
+	return normalized;
 }
 
 function applyCursorTypeInRange(
@@ -308,60 +331,96 @@ function buildClickClusters(
 	clicks: CursorInteractionCandidate[],
 	mergeGapMs: number,
 ): Array<{ firstMs: number; lastMs: number; focus: ZoomFocus }> {
-	if (clicks.length === 0) {
-		return [];
-	}
-
-	const sorted = [...clicks].sort((a, b) => a.centerTimeMs - b.centerTimeMs);
-	const clusters: Array<{ firstMs: number; lastMs: number; focus: ZoomFocus }> = [];
-
-	let clusterStart = sorted[0].centerTimeMs;
-	let clusterEnd = sorted[0].centerTimeMs;
-	let bestStrength = sorted[0].strength;
-	let bestFocus = sorted[0].focus;
-	let sumCx = sorted[0].focus.cx;
-	let sumCy = sorted[0].focus.cy;
-	let count = 1;
-
-	for (let i = 1; i < sorted.length; i++) {
-		const click = sorted[i];
-		const gap = click.centerTimeMs - clusterEnd;
-
-		if (gap <= mergeGapMs) {
-			// Extend current cluster
-			clusterEnd = Math.max(clusterEnd, click.centerTimeMs);
-			if (click.strength > bestStrength) {
-				bestStrength = click.strength;
-				bestFocus = click.focus;
+	return clusterByTimeGap(clicks, (click) => click.centerTimeMs, mergeGapMs).map((cluster) => {
+		// The focus is the strongest click's; on a tie the earliest wins, which
+		// is what the original loop did by only replacing on a strictly greater
+		// strength.
+		let strongestClick = cluster[0];
+		for (const click of cluster) {
+			if (click.strength > strongestClick.strength) {
+				strongestClick = click;
 			}
-			sumCx += click.focus.cx;
-			sumCy += click.focus.cy;
-			count += 1;
-		} else {
-			// Flush current cluster and start a new one
-			clusters.push({
-				firstMs: clusterStart,
-				lastMs: clusterEnd,
-				focus: bestFocus ?? { cx: sumCx / count, cy: sumCy / count },
-			});
-			clusterStart = click.centerTimeMs;
-			clusterEnd = click.centerTimeMs;
-			bestStrength = click.strength;
-			bestFocus = click.focus;
-			sumCx = click.focus.cx;
-			sumCy = click.focus.cy;
-			count = 1;
+		}
+
+		return {
+			firstMs: cluster[0].centerTimeMs,
+			lastMs: cluster[cluster.length - 1].centerTimeMs,
+			focus: strongestClick.focus,
+		};
+	});
+}
+
+/**
+ * Applies ZD7: a typing burst extends the end of the cluster holding the
+ * click it anchors to, and no further than the start of the next cluster's
+ * region, so a later click always keeps the region it would have had.
+ */
+interface TypingExtendedCluster {
+	firstMs: number;
+	/** The cluster's own end, from its clicks alone. */
+	clickLastMs: number;
+	/** The end after typing, never earlier than `clickLastMs`. */
+	lastMs: number;
+	focus: ZoomFocus;
+	/** Bursts whose typing the extended region covers; moved to limited if the extension is reverted. */
+	typingBurstsApplied: number;
+}
+
+function extendClustersWithTypingBursts(
+	clusters: Array<{ firstMs: number; lastMs: number; focus: ZoomFocus }>,
+	typingCandidates: TypingBurstCandidate[],
+	padMs: number,
+): { clusters: TypingExtendedCluster[]; burstsLimitedByClick: number } {
+	const extended: TypingExtendedCluster[] = clusters.map((cluster) => ({
+		firstMs: cluster.firstMs,
+		clickLastMs: cluster.lastMs,
+		lastMs: cluster.lastMs,
+		focus: cluster.focus,
+		typingBurstsApplied: 0,
+	}));
+	let burstsLimitedByClick = 0;
+
+	for (const candidate of typingCandidates) {
+		if (candidate.anchorClickTimeMs === null) {
+			continue;
+		}
+
+		const anchorClickTimeMs = candidate.anchorClickTimeMs;
+		// Every click sample is in exactly one cluster, so the anchor is found by
+		// the cluster's own click span, not its typing extended one.
+		const clusterIndex = extended.findIndex(
+			(cluster) =>
+				anchorClickTimeMs >= cluster.firstMs && anchorClickTimeMs <= cluster.clickLastMs,
+		);
+		if (clusterIndex === -1) {
+			continue;
+		}
+
+		const cluster = extended[clusterIndex];
+		const nextCluster = extended[clusterIndex + 1];
+		// The extended region ends at lastMs + padMs and the next region starts
+		// at its firstMs - padMs; keeping them apart bounds lastMs by two paddings.
+		const latestAllowedLastMs =
+			nextCluster === undefined
+				? Number.POSITIVE_INFINITY
+				: nextCluster.firstMs - padMs - padMs;
+		const requestedLastMs = candidate.burst.lastKeystrokeMs;
+		const grantedLastMs = Math.min(requestedLastMs, latestAllowedLastMs);
+
+		if (grantedLastMs < requestedLastMs) {
+			burstsLimitedByClick += 1;
+		}
+		if (grantedLastMs > cluster.lastMs) {
+			cluster.lastMs = grantedLastMs;
+		}
+		// Applied when the region now covers the typing at all: extended past
+		// the clicks, or the clicks already ran past it.
+		if (grantedLastMs > cluster.clickLastMs || requestedLastMs <= cluster.clickLastMs) {
+			cluster.typingBurstsApplied += 1;
 		}
 	}
 
-	// Flush last cluster
-	clusters.push({
-		firstMs: clusterStart,
-		lastMs: clusterEnd,
-		focus: bestFocus ?? { cx: sumCx / count, cy: sumCy / count },
-	});
-
-	return clusters;
+	return { clusters: extended, burstsLimitedByClick };
 }
 
 export function buildInteractionZoomSuggestions(params: {
@@ -402,32 +461,70 @@ export function buildInteractionZoomSuggestions(params: {
 		(candidate) => candidate.source === "explicit",
 	);
 
+	// The typing summary exists only when keystrokes were present, so a
+	// recording with no typing returns exactly the shape it always has.
+	const hasKeystrokes = normalizedSamples.some(
+		(sample) => sample.interactionType === "keystroke",
+	);
+	const typingCandidates = hasKeystrokes ? buildTypingBurstCandidates(normalizedSamples) : [];
+	const typingSummary: TypingSuggestionSummary | undefined = hasKeystrokes
+		? {
+				burstsDetected: typingCandidates.length,
+				burstsApplied: 0,
+				burstsDeclinedForFocus: typingCandidates.filter(
+					(candidate) => candidate.focusRule === "no-trustworthy-focus",
+				).length,
+				burstsLimitedByClick: 0,
+			}
+		: undefined;
+	const withTyping = (
+		result: InteractionZoomSuggestionResult,
+	): InteractionZoomSuggestionResult =>
+		typingSummary === undefined ? result : { ...result, typing: typingSummary };
+
 	if (clickCandidates.length === 0) {
-		return { status: "no-interactions", suggestions: [] };
+		return withTyping({ status: "no-interactions", suggestions: [] });
 	}
 
 	// Group nearby clicks into clusters, then derive zoom windows from those clusters
-	const clusters = buildClickClusters(clickCandidates, mergeGapMs);
+	const clickClusters = buildClickClusters(clickCandidates, mergeGapMs);
+	const extension = extendClustersWithTypingBursts(clickClusters, typingCandidates, padMs);
+	if (typingSummary !== undefined) {
+		typingSummary.burstsLimitedByClick += extension.burstsLimitedByClick;
+	}
 
 	const reserved = [...reservedSpans].sort((a, b) => a.start - b.start);
 	const suggestions: SuggestedZoomRegion[] = [];
 
-	for (const cluster of clusters) {
+	for (const cluster of extension.clusters) {
 		const regionStart = Math.max(0, cluster.firstMs - padMs);
-		const regionEnd = Math.min(totalMs, cluster.lastMs + padMs);
+		let regionEnd = Math.min(totalMs, cluster.lastMs + padMs);
 
 		if (regionEnd <= regionStart) {
 			continue;
 		}
 
-		const hasOverlap = reserved.some(
-			(span) => regionEnd > span.start && regionStart < span.end,
-		);
+		const overlapsReserved = (end: number) =>
+			reserved.some((span) => end > span.start && regionStart < span.end);
 
-		if (hasOverlap) {
+		if (overlapsReserved(regionEnd) && cluster.lastMs > cluster.clickLastMs) {
+			// The typing extension ran into a reserved span. The click's own
+			// region is tried on its own, exactly as it would have been without
+			// typing, and the bursts it was carrying are counted as limited.
+			regionEnd = Math.min(totalMs, cluster.clickLastMs + padMs);
+			if (typingSummary !== undefined) {
+				typingSummary.burstsLimitedByClick += cluster.typingBurstsApplied;
+			}
+			cluster.typingBurstsApplied = 0;
+		}
+
+		if (overlapsReserved(regionEnd)) {
 			continue;
 		}
 
+		if (typingSummary !== undefined) {
+			typingSummary.burstsApplied += cluster.typingBurstsApplied;
+		}
 		reserved.push({ start: regionStart, end: regionEnd });
 		suggestions.push({
 			start: regionStart,
@@ -437,13 +534,13 @@ export function buildInteractionZoomSuggestions(params: {
 	}
 
 	if (suggestions.length === 0) {
-		return { status: "no-slots", suggestions: [] };
+		return withTyping({ status: "no-slots", suggestions: [] });
 	}
 
 	// Sort chronologically
 	suggestions.sort((a, b) => a.start - b.start);
 
-	return { status: "ok", suggestions };
+	return withTyping({ status: "ok", suggestions });
 }
 
 /**

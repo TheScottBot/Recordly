@@ -41,6 +41,11 @@ were cleared at which commit.
   character; never which key. Stored as `keyboardCaptureEnabled` in
   `recordings-settings.json`; the on screen control follows. See
   `PRIVACY.md`.
+- Zoom suggestions now cover typing. A burst of typing that follows a click
+  extends that click's suggested zoom to the end of the typing, keeping the
+  click's focus. A burst with no preceding click produces no suggestion. A
+  recording with no typing produces exactly the suggestions it did before,
+  pinned by a byte identical regression test.
 
 ### Author gates cleared
 

@@ -12,7 +12,7 @@
 
 import type { CursorTelemetryPoint, ZoomFocus } from "../types";
 import { clusterByTimeGap } from "./timeGapClustering";
-import { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionUtils";
+import { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionConstants";
 
 /** Fewer presses than this is a shortcut or a stray key, not typing. */
 export const TYPING_BURST_MIN_KEYSTROKES = 3;
