@@ -1,3 +1,4 @@
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
 import { Plus } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import type {
 	SpeedRegion,
 	TrimRegion,
 	ZoomFocus,
+	ZoomTrigger,
 	ZoomRegion,
 } from "../types";
 import KeyframeMarkers from "./components/markers/KeyframeMarkers";
@@ -37,12 +39,13 @@ export interface TimelineEditorProps {
 	playheadTime?: number;
 	onSeek?: (time: number) => void;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	typingEvents?: TypingEvent[];
 	autoSuggestZoomsTrigger?: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	disableSuggestedZooms?: boolean;
 	zoomRegions: ZoomRegion[];
 	onZoomAdded: (span: Span) => void;
-	onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
+	onZoomSuggested?: (span: Span, focus: ZoomFocus, trigger?: ZoomTrigger) => void;
 	onZoomSpanChange: (id: string, span: Span) => void;
 	onZoomDelete: (id: string) => void;
 	selectedZoomId: string | null;
@@ -120,6 +123,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			playheadTime,
 			onSeek,
 			cursorTelemetry = [],
+			typingEvents = [],
 			autoSuggestZoomsTrigger = 0,
 			onAutoSuggestZoomsConsumed,
 			disableSuggestedZooms = false,
@@ -359,6 +363,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			currentTimeMs,
 			safeMinDurationMs,
 			cursorTelemetry,
+			typingEvents,
 			autoSuggestZoomsTrigger,
 			onAutoSuggestZoomsConsumed,
 			disableSuggestedZooms,

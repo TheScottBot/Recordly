@@ -1,6 +1,7 @@
 import {
 	FilmSlate as Film,
 	Gauge,
+	Keyboard,
 	ChatCircle as MessageSquare,
 	MusicNotes as Music,
 	MouseLeftClickIcon as PhMouseLeftClick,
@@ -13,10 +14,12 @@ import { useItem } from "dnd-timeline";
 import { useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import type { ZoomTrigger } from "../types";
 import { formatClipSpeedLabel } from "../clipSpeedChange";
 import AudioWaveform from "./components/waveform/AudioWaveform";
 import type { AudioPeaksData } from "./core/timelineTypes";
 import glassStyles from "./ItemGlass.module.css";
+import { describeZoomTrigger } from "./zoomTriggerAppearance";
 
 interface ItemProps {
 	id: string;
@@ -29,6 +32,7 @@ interface ItemProps {
 	onSelectId?: (id: string) => void;
 	zoomDepth?: number;
 	zoomMode?: "auto" | "manual";
+	zoomTrigger?: ZoomTrigger;
 	speedValue?: number;
 	waveformPeaks?: AudioPeaksData | null;
 	waveformSegmentSpan?: Span;
@@ -70,6 +74,7 @@ export default function Item({
 	onSelectId,
 	zoomDepth = 1,
 	zoomMode = "auto",
+	zoomTrigger,
 	speedValue,
 	waveformPeaks = null,
 	waveformSegmentSpan,
@@ -129,8 +134,9 @@ export default function Item({
 	const showAudioWaveform = isAudio && Boolean(waveformPeaks);
 	const clipSpeedLabel = isClip ? formatClipSpeedLabel(speedValue ?? 1) : null;
 
+	const zoomAppearance = describeZoomTrigger(zoomTrigger);
 	const glassClass = isZoom
-		? glassStyles.glassPurple
+		? glassStyles[zoomAppearance.glassClassName]
 		: isTrim
 			? glassStyles.glassRed
 			: isClip
@@ -186,6 +192,7 @@ export default function Item({
 						minHeight: 22,
 						minWidth: MIN_ITEM_PX,
 					}}
+					title={isZoom ? zoomAppearance.itemTitle : undefined}
 					onClick={(event) => {
 						event.stopPropagation();
 					}}
@@ -221,8 +228,13 @@ export default function Item({
 						<div className="flex items-center gap-1.5">
 							{isZoom ? (
 								<>
-									<ZoomIn className="w-3.5 h-3.5 shrink-0" />
+									{zoomTrigger === "typing" ? (
+										<Keyboard className="w-3.5 h-3.5 shrink-0" />
+									) : (
+										<ZoomIn className="w-3.5 h-3.5 shrink-0" />
+									)}
 									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+										{zoomAppearance.label}{" "}
 										{ZOOM_LABELS[zoomDepth] || `${zoomDepth}×`}
 									</span>
 								</>

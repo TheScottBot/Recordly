@@ -8,9 +8,10 @@ import {
 } from "./cursorTelemetryContract";
 
 describe("cursor telemetry contract", () => {
-	it("declares the six pre existing interaction values and the keystroke value, in one place", () => {
+	it("declares the six interaction values a cursor sample may carry, in one place", () => {
 		// The order and the exact members are the contract. Adding or removing a
-		// value here is a version decision, not an edit.
+		// value here is a version decision, not an edit. Typing is deliberately
+		// absent: it lives in its own sidecar, not in cursor telemetry.
 		expect(CURSOR_INTERACTION_TYPES).toEqual([
 			"move",
 			"click",
@@ -18,7 +19,6 @@ describe("cursor telemetry contract", () => {
 			"right-click",
 			"middle-click",
 			"mouseup",
-			"keystroke",
 		]);
 	});
 
@@ -28,23 +28,23 @@ describe("cursor telemetry contract", () => {
 		}
 
 		expect(isCursorInteractionType("drag")).toBe(false);
+		expect(isCursorInteractionType("keystroke")).toBe(false);
 		expect(isCursorInteractionType("keydown")).toBe(false);
 		expect(isCursorInteractionType(undefined)).toBe(false);
 		expect(isCursorInteractionType(3)).toBe(false);
 	});
 
-	it("writes telemetry version 3 and still reads version 2", () => {
-		expect(CURSOR_TELEMETRY_VERSION).toBe(3);
-		expect(SUPPORTED_CURSOR_TELEMETRY_VERSIONS).toEqual([2, 3]);
+	it("stays at version 2, because typing never enters this file", () => {
+		expect(CURSOR_TELEMETRY_VERSION).toBe(2);
+		expect(SUPPORTED_CURSOR_TELEMETRY_VERSIONS).toEqual([2]);
 		expect(isSupportedCursorTelemetryVersion(2)).toBe(true);
-		expect(isSupportedCursorTelemetryVersion(3)).toBe(true);
 	});
 
 	it("does not treat an unknown, missing or non numeric version as supported", () => {
 		expect(isSupportedCursorTelemetryVersion(1)).toBe(false);
-		expect(isSupportedCursorTelemetryVersion(4)).toBe(false);
+		expect(isSupportedCursorTelemetryVersion(3)).toBe(false);
 		expect(isSupportedCursorTelemetryVersion(undefined)).toBe(false);
-		expect(isSupportedCursorTelemetryVersion("3")).toBe(false);
+		expect(isSupportedCursorTelemetryVersion("2")).toBe(false);
 		expect(isSupportedCursorTelemetryVersion(Number.NaN)).toBe(false);
 	});
 });

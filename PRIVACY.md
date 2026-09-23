@@ -22,26 +22,29 @@ holds, roughly thirty times a second:
 - the time since the recording started
 - the pointer position, as a fraction of the captured area
 - whether that sample was a click, a double click, a right or middle click,
-  a mouse release, a plain move, or, if keyboard capture is on, a key press
+  a mouse release or a plain move
 - the cursor shape at the time (arrow, text, pointer, and so on)
 
-It never holds what was on screen or what was typed.
+It never holds what was on screen or what was typed. Typing is not recorded
+in this file at all: it has its own, described next.
 
 ## Keyboard capture
 
 Off by default. Recordly captured no keyboard data before this setting
 existed, and turning it on is your choice.
 
-When it is on, each key press adds one sample to the cursor telemetry
-carrying:
+When it is on, Recordly writes a second file beside the recording,
+`<recording>.typing.json`. Each key press adds one entry holding:
 
 - the time since the recording started
-- where the pointer was at that moment
 - one yes or no: whether the key normally produces a character (a letter,
   digit, space, punctuation mark, Enter, Backspace or Delete) rather than
   being a modifier, arrow, function or lock key
 
-That is all. Recordly does not record which key was pressed, what character
+That is all. There is no position in it either: where a typing zoom points is
+worked out from the click you made before you started typing, never from
+where the pointer happened to be. If a recording holds no typing, the file is
+not written at all. Recordly does not record which key was pressed, what character
 it produced, which modifiers were held, or anything from which the text you
 typed could be reconstructed. The key's identity is read once, inside the
 capture callback, to produce that single yes or no, and is then discarded.
@@ -78,12 +81,14 @@ capture on. Anything else, including the key being absent, means off.
 
 ## Retention
 
-The sidecar lives next to its recording, in your recordings folder, for as
+The sidecars live next to their recording, in your recordings folder, for as
 long as the recording does. Recordly can delete only its own automatic
-recordings from inside the application, and when it does it deletes the
-sidecar with them; the same happens when old automatic recordings are pruned.
-If you delete a recording file yourself, the sidecar stays until you delete
-it too. Nothing is uploaded.
+recordings from inside the application, and when it does it deletes both
+sidecars with them; the same happens when old automatic recordings are
+pruned. A test asserts that the typing file goes with the recording, so
+keyboard derived data cannot outlive what it came from. If you delete a
+recording file yourself, the sidecars stay until you delete them too.
+Nothing is uploaded.
 
 ## What this cannot protect against
 

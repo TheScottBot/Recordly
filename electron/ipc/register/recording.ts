@@ -21,6 +21,10 @@ import {
 import { ALLOW_RECORDLY_WINDOW_CAPTURE } from "../constants";
 import { startWindowBoundsCapture, stopWindowBoundsCapture } from "../cursor/bounds";
 import { startInteractionCapture, stopInteractionCapture } from "../cursor/interaction";
+import {
+	parseTypingTelemetrySidecar,
+	snapshotTypingTelemetryForPersistence,
+} from "../cursor/typingTelemetry";
 import { readKeyboardCaptureEnabled } from "../settings/recordingPreferencesStore";
 import { sharedRecordingPreferencesStore } from "../settings/sharedRecordingPreferencesStore";
 import { startNativeCursorMonitor, stopNativeCursorMonitor } from "../cursor/monitor";
@@ -106,6 +110,8 @@ import {
 	nativeScreenRecordingActive,
 	selectedSource,
 	setActiveCursorSamples,
+	setActiveTypingEvents,
+	setPendingTypingEvents,
 	setCachedSystemCursorAssets,
 	setCachedSystemCursorAssetsSourceMtimeMs,
 	setCursorCaptureStartTimeMs,
@@ -151,6 +157,7 @@ import {
 	getRecordingsDir,
 	getScreen,
 	getTelemetryPathForVideo,
+	getTypingTelemetryPathForVideo,
 	moveFileWithOverwrite,
 	normalizeVideoSourcePath,
 	parseJsonWithByteOrderMark,
@@ -1884,6 +1891,8 @@ export function registerRecordingHandlers(
 			setIsCursorCaptureActive(true);
 			setActiveCursorSamples([]);
 			setPendingCursorSamples([]);
+			setActiveTypingEvents([]);
+			setPendingTypingEvents([]);
 			setCursorCaptureStartTimeMs(Date.now());
 			resetCursorCaptureClock();
 			setLinuxCursorScreenPoint(null);
@@ -1901,7 +1910,9 @@ export function registerRecordingHandlers(
 			setLinuxCursorScreenPoint(null);
 			resetCursorCaptureClock();
 			snapshotCursorTelemetryForPersistence();
+			snapshotTypingTelemetryForPersistence();
 			setActiveCursorSamples([]);
+			setActiveTypingEvents([]);
 		}
 
 		const source = selectedSource || { name: "Screen" };
@@ -1970,6 +1981,50 @@ export function registerRecordingHandlers(
 				message: "Failed to load cursor telemetry",
 				error: String(error),
 				samples: [],
+			};
+		}
+	});
+
+	ipcMain.handle("get-typing-telemetry", async (_, videoPath?: string) => {
+		const targetVideoPath = normalizeVideoSourcePath(videoPath ?? currentVideoPath);
+		if (!targetVideoPath) {
+			return { success: true, events: [] };
+		}
+
+		const sidecarPath = getTypingTelemetryPathForVideo(targetVideoPath);
+		try {
+			const content = await fs.readFile(sidecarPath, "utf-8");
+			const sidecar = parseTypingTelemetrySidecar(
+				parseJsonWithByteOrderMark<unknown>(content),
+			);
+
+			if (sidecar.status === "rejected") {
+				console.warn("[TypingTelemetry] Sidecar rejected", {
+					reason: sidecar.reason,
+					version: sidecar.version,
+					byteLength: content.length,
+				});
+				return {
+					success: false,
+					message: "Typing telemetry sidecar rejected",
+					error: sidecar.reason,
+					events: [],
+				};
+			}
+
+			return { success: true, events: sidecar.events };
+		} catch (error) {
+			const nodeError = error as NodeJS.ErrnoException;
+			// No file means the recording held no typing, which is ordinary.
+			if (nodeError.code === "ENOENT") {
+				return { success: true, events: [] };
+			}
+			console.error("Failed to load typing telemetry:", error);
+			return {
+				success: false,
+				message: "Failed to load typing telemetry",
+				error: String(error),
+				events: [],
 			};
 		}
 	});

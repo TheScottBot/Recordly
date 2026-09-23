@@ -8,6 +8,7 @@ import {
 	type ZoomFocus,
 	type ZoomMode,
 	type ZoomRegion,
+	type ZoomTrigger,
 } from "../types";
 
 interface UseZoomRegionCommandsParams {
@@ -95,7 +96,7 @@ export function useZoomRegionCommands({
 	);
 
 	const handleZoomSuggested = useCallback(
-		(span: Span, focus: ZoomFocus) => {
+		(span: Span, focus: ZoomFocus, trigger?: ZoomTrigger) => {
 			const newRegion: ZoomRegion = {
 				id: `zoom-${nextZoomIdRef.current++}`,
 				startMs: Math.round(span.start),
@@ -103,6 +104,9 @@ export function useZoomRegionCommands({
 				depth: DEFAULT_AUTO_ZOOM_DEPTH,
 				focus: clampFocusToDepth(focus, DEFAULT_AUTO_ZOOM_DEPTH),
 				mode: "auto",
+				// Absent means a click produced it, which is what every region
+				// saved before typing zooms existed is.
+				...(trigger === "typing" ? { trigger } : {}),
 			};
 			markFreshRecordingSuggestion();
 			setZoomRegions((current) => [...current, newRegion]);

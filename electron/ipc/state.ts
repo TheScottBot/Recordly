@@ -9,6 +9,7 @@ import type {
 	SystemCursorAsset,
 	WindowBounds,
 } from "./types";
+import type { TypingEvent } from "../../src/lib/typingTelemetryContract";
 
 // ── Source selection ──────────────────────────────────────────────────────────
 export let selectedSource: SelectedSource | null = null;
@@ -80,6 +81,8 @@ export let cursorCaptureAccumulatedPausedMs = 0;
 export let cursorCapturePauseStartedAtMs: number | null = null;
 export let activeCursorSamples: CursorTelemetryPoint[] = [];
 export let pendingCursorSamples: CursorTelemetryPoint[] = [];
+export let activeTypingEvents: TypingEvent[] = [];
+export let pendingTypingEvents: TypingEvent[] = [];
 export let isCursorCaptureActive = false;
 export let interactionCaptureCleanup: (() => void) | null = null;
 export let hasLoggedInteractionHookFailure = false;
@@ -248,6 +251,14 @@ export function setCursorCapturePauseStartedAtMs(v: number | null) {
 export function setActiveCursorSamples(v: CursorTelemetryPoint[]) {
 	activeCursorSamples = v;
 }
+export function setActiveTypingEvents(v: TypingEvent[]) {
+	activeTypingEvents = v;
+}
+
+export function setPendingTypingEvents(v: TypingEvent[]) {
+	pendingTypingEvents = v;
+}
+
 export function setPendingCursorSamples(v: CursorTelemetryPoint[]) {
 	pendingCursorSamples = v;
 }

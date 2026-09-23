@@ -236,6 +236,7 @@ export function EditorShell(props: Props) {
 					videoSourcePath={project.videoSourcePath}
 					cursorTelemetrySourcePath={timeline.cursorTelemetrySourcePath}
 					normalizedCursorTelemetry={cursor.normalizedCursorTelemetry}
+					typingEvents={cursor.typingEvents}
 					autoSuggestZoomsTrigger={ui.autoSuggestZoomsTrigger}
 					handleAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 					disableSuggestedZooms={!appearance.autoApplyFreshRecordingAutoZooms}

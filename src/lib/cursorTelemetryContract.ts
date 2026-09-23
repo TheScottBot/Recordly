@@ -12,8 +12,8 @@
  * Every value `interactionType` may carry, in declaration order. The runtime
  * allowlist and the TypeScript union are both derived from this tuple.
  *
- * `keystroke` records that a key was pressed and when. It never carries which
- * key; see `PRIVACY.md`.
+ * Typing is not here: it is recorded in its own sidecar, declared in
+ * `typingTelemetryContract.ts`, because a key press is not a cursor sample.
  */
 export const CURSOR_INTERACTION_TYPES = [
 	"move",
@@ -22,7 +22,6 @@ export const CURSOR_INTERACTION_TYPES = [
 	"right-click",
 	"middle-click",
 	"mouseup",
-	"keystroke",
 ] as const;
 
 export type CursorInteractionType = (typeof CURSOR_INTERACTION_TYPES)[number];
@@ -51,23 +50,16 @@ export interface CursorTelemetryPoint {
 	pressure?: number;
 	interactionType?: CursorInteractionType;
 	cursorType?: CursorVisualType;
-	/**
-	 * Present only on `keystroke` samples. True when the key would normally
-	 * produce a character (a letter, digit, space, punctuation, Enter or
-	 * Backspace); false for modifier, navigation and function keys. This one
-	 * bit is the most that may be derived from key identity.
-	 */
-	keyProducesCharacter?: boolean;
 }
 
 /**
- * The version written into every new sidecar. Version 2 is what every
- * recording made before the keystroke value existed carries; version 3 adds
- * `keystroke` and `keyProducesCharacter`. Both must load.
+ * The version written into every sidecar. It has never changed: typing was
+ * added to Recordly without touching this file, so every recording ever made
+ * reads and writes the same shape.
  */
-export const CURSOR_TELEMETRY_VERSION = 3;
+export const CURSOR_TELEMETRY_VERSION = 2;
 
-export const SUPPORTED_CURSOR_TELEMETRY_VERSIONS = [2, 3] as const;
+export const SUPPORTED_CURSOR_TELEMETRY_VERSIONS = [2] as const;
 
 const supportedCursorTelemetryVersionSet: ReadonlySet<number> = new Set(
 	SUPPORTED_CURSOR_TELEMETRY_VERSIONS,

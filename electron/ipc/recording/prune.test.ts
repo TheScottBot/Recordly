@@ -104,6 +104,32 @@ describe("pruneAutoRecordings", () => {
 		await expect(fs.access(prunableRecordingPath!)).rejects.toThrow();
 	});
 
+	it("removes both telemetry sidecars with the recording they belong to", async () => {
+		const { getRecordingsDir } = await import("../utils");
+		const { pruneAutoRecordings } = await import("./prune");
+
+		const recordingsDir = await getRecordingsDir();
+		const recordingPaths: string[] = [];
+		for (let index = 0; index < 23; index += 1) {
+			const recordingPath = path.join(recordingsDir, `recording-${index}.mp4`);
+			recordingPaths.push(recordingPath);
+			await fs.writeFile(recordingPath, `video-${index}`);
+			await fs.writeFile(`${recordingPath}.cursor.json`, "{}");
+			await fs.writeFile(`${recordingPath}.typing.json`, "{}");
+			const timestamp = new Date(Date.now() - index * 60_000);
+			await fs.utimes(recordingPath, timestamp, timestamp);
+		}
+
+		const prunedRecordingPath = recordingPaths.at(-1) as string;
+
+		await pruneAutoRecordings();
+
+		// Keyboard derived data must not outlive the recording it came from.
+		await expect(fs.access(prunedRecordingPath)).rejects.toThrow();
+		await expect(fs.access(`${prunedRecordingPath}.cursor.json`)).rejects.toThrow();
+		await expect(fs.access(`${prunedRecordingPath}.typing.json`)).rejects.toThrow();
+	});
+
 	it("aborts pruning when a saved project cannot be parsed", async () => {
 		const { getRecordingsDir } = await import("../utils");
 		const { PROJECTS_DIRECTORY_NAME, PROJECT_FILE_EXTENSION } = await import("../constants");

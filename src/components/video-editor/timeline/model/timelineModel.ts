@@ -58,6 +58,7 @@ export function buildTimelineItems(params: {
 		label: `Zoom ${index + 1}`,
 		zoomDepth: region.depth,
 		zoomMode: region.mode ?? "auto",
+		zoomTrigger: region.trigger,
 		variant: "zoom",
 	}));
 

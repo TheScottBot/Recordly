@@ -13,10 +13,14 @@ vi.mock("electron", () => ({
 
 // The keyboard capture tests write a real sidecar into a temporary directory,
 // so the path the writer resolves is set per test through this holder.
-const telemetryPathHolder = vi.hoisted(() => ({ path: "/tmp/recording.cursor.json" }));
+const telemetryPathHolder = vi.hoisted(() => ({
+	path: "/tmp/recording.cursor.json",
+	typingPath: "/tmp/recording.typing.json",
+}));
 
 vi.mock("../utils", () => ({
 	getTelemetryPathForVideo: vi.fn(() => telemetryPathHolder.path),
+	getTypingTelemetryPathForVideo: vi.fn(() => telemetryPathHolder.typingPath),
 	getScreen: vi.fn(() => ({
 		getCursorScreenPoint: () => ({ x: 50, y: 50 }),
 		getPrimaryDisplay: () => ({ scaleFactor: 1 }),
@@ -27,7 +31,9 @@ vi.mock("../utils", () => ({
 
 import {
 	activeCursorSamples,
+	activeTypingEvents,
 	setActiveCursorSamples,
+	setActiveTypingEvents,
 	setCursorCaptureStartTimeMs,
 	setIsCursorCaptureActive,
 } from "../state";
@@ -38,12 +44,8 @@ import {
 	startInteractionCapture,
 	stopInteractionCapture,
 } from "./interaction";
-import {
-	pauseCursorCapture,
-	resetCursorCaptureClock,
-	resumeCursorCapture,
-	writeCursorTelemetry,
-} from "./telemetry";
+import { pauseCursorCapture, resetCursorCaptureClock, resumeCursorCapture } from "./telemetry";
+import { writeTypingTelemetry } from "./typingTelemetry";
 
 describe("shouldStartGlobalInteractionHook", () => {
 	it("does not start the synchronous uiohook event tap on macOS", () => {
@@ -133,6 +135,7 @@ describe("keyboard capture through the global interaction hook", () => {
 		vi.useFakeTimers({ now: CAPTURE_STARTED_AT_MS });
 		setIsCursorCaptureActive(true);
 		setActiveCursorSamples([]);
+		setActiveTypingEvents([]);
 		setCursorCaptureStartTimeMs(CAPTURE_STARTED_AT_MS);
 		resetCursorCaptureClock();
 	});
@@ -184,7 +187,7 @@ describe("keyboard capture through the global interaction hook", () => {
 		expect(fakeModule.stopCallCount).toBe(1);
 	});
 
-	it("records a keystroke sample carrying only the time, the pointer position and the character flag", async () => {
+	it("records a typing event carrying only the time and the character flag", async () => {
 		const fakeModule = await startCaptureWithFakeHook(true);
 		vi.setSystemTime(CAPTURE_STARTED_AT_MS + 500);
 
@@ -199,28 +202,14 @@ describe("keyboard capture through the global interaction hook", () => {
 			time: FAKE_HOOK_TIME,
 		});
 
-		expect(activeCursorSamples).toHaveLength(2);
-		const [characterSample, modifierSample] = activeCursorSamples;
-		expect(characterSample).toEqual({
-			timeMs: 500,
-			cx: 0.5,
-			cy: 0.5,
-			interactionType: "keystroke",
-			cursorType: undefined,
-			keyProducesCharacter: true,
-		});
-		expect(modifierSample.keyProducesCharacter).toBe(false);
-		for (const sample of activeCursorSamples) {
-			expect(Object.keys(sample).sort()).toEqual(
-				[
-					"cursorType",
-					"cx",
-					"cy",
-					"interactionType",
-					"keyProducesCharacter",
-					"timeMs",
-				].sort(),
-			);
+		// Nothing reaches the cursor telemetry: typing is not a cursor sample.
+		expect(activeCursorSamples).toHaveLength(0);
+		expect(activeTypingEvents).toEqual([
+			{ timeMs: 500, keyProducesCharacter: true },
+			{ timeMs: 500, keyProducesCharacter: false },
+		]);
+		for (const event of activeTypingEvents) {
+			expect(Object.keys(event).sort()).toEqual(["keyProducesCharacter", "timeMs"]);
 		}
 	});
 
@@ -229,12 +218,12 @@ describe("keyboard capture through the global interaction hook", () => {
 
 		pauseCursorCapture(CAPTURE_STARTED_AT_MS + 100);
 		fakeModule.emit("keydown", { keycode: FAKE_KEY_TABLE.A });
-		expect(activeCursorSamples).toHaveLength(0);
+		expect(activeTypingEvents).toHaveLength(0);
 
 		resumeCursorCapture(CAPTURE_STARTED_AT_MS + 300);
 		setIsCursorCaptureActive(false);
 		fakeModule.emit("keydown", { keycode: FAKE_KEY_TABLE.A });
-		expect(activeCursorSamples).toHaveLength(0);
+		expect(activeTypingEvents).toHaveLength(0);
 	});
 
 	it("stamps keystrokes with the capture clock, so paused time is excluded", async () => {
@@ -245,13 +234,13 @@ describe("keyboard capture through the global interaction hook", () => {
 		vi.setSystemTime(CAPTURE_STARTED_AT_MS + 1_000);
 		fakeModule.emit("keydown", { keycode: FAKE_KEY_TABLE.Space });
 
-		expect(activeCursorSamples.map((sample) => sample.timeMs)).toEqual([500]);
+		expect(activeTypingEvents.map((event) => event.timeMs)).toEqual([500]);
 	});
 
 	it("writes a sidecar in which nothing derived from key identity appears", async () => {
 		const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "recordly-keystroke-"));
 		tempRoots.push(tempRoot);
-		telemetryPathHolder.path = path.join(tempRoot, "recording.cursor.json");
+		telemetryPathHolder.typingPath = path.join(tempRoot, "recording.typing.json");
 		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
 		const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 		const fakeModule = await startCaptureWithFakeHook(true);
@@ -260,14 +249,12 @@ describe("keyboard capture through the global interaction hook", () => {
 			vi.setSystemTime(Date.now() + 100);
 			fakeModule.emit("keydown", { keycode, time: FAKE_HOOK_TIME, shiftKey: true });
 		}
-		await writeCursorTelemetry(path.join(tempRoot, "recording.mp4"), activeCursorSamples);
+		await writeTypingTelemetry(path.join(tempRoot, "recording.mp4"), activeTypingEvents);
 
-		const writtenSidecar = await fs.readFile(telemetryPathHolder.path, "utf8");
+		const writtenSidecar = await fs.readFile(telemetryPathHolder.typingPath, "utf8");
 		expect(writtenSidecar).not.toMatch(LEAKED_KEY_IDENTITY);
-		for (const sample of JSON.parse(writtenSidecar).samples) {
-			expect(Object.keys(sample).sort()).toEqual(
-				["cx", "cy", "interactionType", "keyProducesCharacter", "timeMs"].sort(),
-			);
+		for (const event of JSON.parse(writtenSidecar).events) {
+			expect(Object.keys(event).sort()).toEqual(["keyProducesCharacter", "timeMs"]);
 		}
 		const everyLoggedArgument = [...consoleLog.mock.calls, ...consoleWarn.mock.calls].flat();
 		expect(JSON.stringify(everyLoggedArgument)).not.toMatch(LEAKED_KEY_IDENTITY);

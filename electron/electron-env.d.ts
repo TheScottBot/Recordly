@@ -593,6 +593,12 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		getTypingTelemetry: (videoPath?: string) => Promise<{
+			success: boolean;
+			events: import("../src/lib/typingTelemetryContract").TypingEvent[];
+			message?: string;
+			error?: string;
+		}>;
 		setCursorTelemetry: (
 			videoPath: string | undefined,
 			samples: CursorTelemetryPoint[],

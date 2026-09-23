@@ -444,6 +444,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 							region.mode === "auto" || region.mode === "manual"
 								? region.mode
 								: undefined,
+						// Left off entirely when absent or unknown, so a project
+						// saved before typing zooms existed round trips unchanged.
+						...(region.trigger === "click" || region.trigger === "typing"
+							? { trigger: region.trigger }
+							: {}),
 					};
 				})
 		: [];

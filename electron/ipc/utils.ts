@@ -67,6 +67,15 @@ export function getTelemetryPathForVideo(videoPath: string) {
 	return `${videoPath}.cursor.json`;
 }
 
+/**
+ * Typing is recorded beside the cursor sidecar rather than inside it: a key
+ * press is not a cursor sample. Absence of this file means the recording
+ * held no typing.
+ */
+export function getTypingTelemetryPathForVideo(videoPath: string) {
+	return `${videoPath}.typing.json`;
+}
+
 export function isAutoRecordingPath(filePath: string) {
 	return path.basename(filePath).startsWith(AUTO_RECORDING_PREFIX);
 }

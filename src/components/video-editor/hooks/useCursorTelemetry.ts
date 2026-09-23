@@ -1,4 +1,5 @@
-import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
+import { type MutableRefObject, useEffect, useMemo, useRef, useState } from "react";
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
 import type { useTimelineState } from "../state/useTimelineState";
 import { normalizeCursorTelemetry } from "../timeline/zoomSuggestionUtils";
 import type { CursorTelemetryPoint } from "../types";
@@ -90,6 +91,34 @@ export function useCursorTelemetry({
 		autoSuggestedVideoPathRef,
 	]);
 
+	// Typing lives in its own sidecar beside the cursor one. A recording with no
+	// typing has no such file, which is ordinary and returns an empty list.
+	const [typingEvents, setTypingEvents] = useState<TypingEvent[]>([]);
+
+	useEffect(() => {
+		let mounted = true;
+
+		async function loadTypingEvents() {
+			if (!videoPath || !videoSourcePath) {
+				if (mounted) setTypingEvents([]);
+				return;
+			}
+			try {
+				const result = await window.electronAPI.getTypingTelemetry(videoSourcePath);
+				if (!mounted) return;
+				setTypingEvents(result.success ? result.events : []);
+			} catch (error) {
+				console.warn("Unable to load typing telemetry:", error);
+				if (mounted) setTypingEvents([]);
+			}
+		}
+
+		void loadTypingEvents();
+		return () => {
+			mounted = false;
+		};
+	}, [videoPath, videoSourcePath]);
+
 	const normalized = useMemo(() => {
 		if (timeline.cursorTelemetry.length === 0) return [] as CursorTelemetryPoint[];
 		const totalMs = Math.max(0, Math.round(duration * 1000));
@@ -121,5 +150,9 @@ export function useCursorTelemetry({
 		);
 	}, [loopCursor, normalized, displayedWindow]);
 
-	return { normalizedCursorTelemetry: normalized, effectiveCursorTelemetry: effective };
+	return {
+		normalizedCursorTelemetry: normalized,
+		effectiveCursorTelemetry: effective,
+		typingEvents,
+	};
 }

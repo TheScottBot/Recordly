@@ -60,3 +60,54 @@ describe("zoom regions from projects saved before the typing work", () => {
 		expect(normalized.zoomRegions[0].mode).toBeUndefined();
 	});
 });
+
+describe("the trigger that produced a zoom region", () => {
+	it("round trips a typing triggered region", () => {
+		const normalized = normalizeProjectEditor({
+			zoomRegions: [
+				{
+					id: "zoom-typing",
+					startMs: 5_500,
+					endMs: 11_850,
+					depth: 2,
+					focus: { cx: 0.3, cy: 0.3 },
+					mode: "auto",
+					trigger: "typing",
+				},
+			],
+		});
+
+		expect(normalized.zoomRegions[0]).toEqual({
+			id: "zoom-typing",
+			startMs: 5_500,
+			endMs: 11_850,
+			depth: 2,
+			focus: { cx: 0.3, cy: 0.3 },
+			mode: "auto",
+			trigger: "typing",
+		});
+	});
+
+	it("leaves a region with no trigger without one, so projects saved before this work are unchanged", () => {
+		const normalized = normalizeProjectEditor({
+			zoomRegions: ZOOM_REGIONS_SAVED_BEFORE_TYPING_WORK.map((region) => ({ ...region })),
+		});
+
+		for (const region of normalized.zoomRegions) {
+			expect(region).not.toHaveProperty("trigger");
+		}
+	});
+
+	it("drops a trigger value it does not know", () => {
+		const normalized = normalizeProjectEditor({
+			zoomRegions: [
+				{
+					...ZOOM_REGIONS_SAVED_BEFORE_TYPING_WORK[0],
+					trigger: "dictation" as unknown as ZoomRegion["trigger"],
+				},
+			],
+		});
+
+		expect(normalized.zoomRegions[0]).not.toHaveProperty("trigger");
+	});
+});

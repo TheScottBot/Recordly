@@ -1,6 +1,7 @@
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
 import type { Span } from "dnd-timeline";
 import { useCallback, useEffect, useMemo } from "react";
-import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion } from "../../../types";
+import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion, ZoomTrigger } from "../../../types";
 import { buildInteractionZoomSuggestions } from "../../zoomSuggestionUtils";
 import { timelineNotifications } from "../utils/timelineNotifications";
 
@@ -15,19 +16,21 @@ interface UseTimelineZoomActionsParams {
 		clip: { startMs: number; endMs: number }[];
 	};
 	cursorTelemetry: CursorTelemetryPoint[];
+	typingEvents?: TypingEvent[];
 	options: {
 		disableSuggestedZooms: boolean;
 	};
 	autoSuggestZoomsTrigger: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	onZoomAdded: (span: Span) => void;
-	onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
+	onZoomSuggested?: (span: Span, focus: ZoomFocus, trigger?: ZoomTrigger) => void;
 }
 
 export function useTimelineZoomActions({
 	timeline,
 	regions,
 	cursorTelemetry,
+	typingEvents,
 	options,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
@@ -139,6 +142,7 @@ export function useTimelineZoomActions({
 
 		const result = buildInteractionZoomSuggestions({
 			cursorTelemetry,
+			typingEvents,
 			totalMs,
 			defaultDurationMs: defaultDuration,
 			reservedSpans: zoomRegions
@@ -171,7 +175,7 @@ export function useTimelineZoomActions({
 		}
 
 		for (const region of result.suggestions) {
-			onZoomSuggested({ start: region.start, end: region.end }, region.focus);
+			onZoomSuggested({ start: region.start, end: region.end }, region.focus, region.trigger);
 		}
 
 		timelineNotifications.success(
@@ -183,6 +187,7 @@ export function useTimelineZoomActions({
 		disableSuggestedZooms,
 		onZoomSuggested,
 		cursorTelemetry,
+		typingEvents,
 		defaultRegionDurationMs,
 		zoomRegions,
 	]);

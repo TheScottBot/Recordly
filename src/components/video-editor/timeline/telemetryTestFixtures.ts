@@ -7,6 +7,7 @@
  * import from here.
  */
 
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
 import type { CursorTelemetryPoint } from "../types";
 
 export function makeClick(
@@ -22,32 +23,18 @@ export function makeMove(timeMs: number, cx = 0.5, cy = 0.5): CursorTelemetryPoi
 	return { timeMs, cx, cy, interactionType: "move" };
 }
 
-/**
- * A keystroke sample as the capture writes it: the pointer position at the
- * moment of the press (which the focus rule must ignore) and the one boolean.
- */
+/** A typing event as the capture writes it: a time and one boolean, nothing else. */
 export function makeKeystroke(
 	timeMs: number,
-	options: { cx?: number; cy?: number; keyProducesCharacter?: boolean } = {},
-): CursorTelemetryPoint {
-	return {
-		timeMs,
-		cx: options.cx ?? 0.9,
-		cy: options.cy ?? 0.9,
-		interactionType: "keystroke",
-		keyProducesCharacter: options.keyProducesCharacter,
-	};
+	options: { keyProducesCharacter?: boolean } = {},
+): TypingEvent {
+	return { timeMs, keyProducesCharacter: options.keyProducesCharacter };
 }
 
 /** Evenly spaced character producing keystrokes starting at `firstMs`. */
-export function makeTypingRun(
-	firstMs: number,
-	count: number,
-	intervalMs = 120,
-	options: { cx?: number; cy?: number } = {},
-): CursorTelemetryPoint[] {
+export function makeTypingRun(firstMs: number, count: number, intervalMs = 120): TypingEvent[] {
 	return Array.from({ length: count }, (_unusedSlot, index) =>
-		makeKeystroke(firstMs + index * intervalMs, { ...options, keyProducesCharacter: true }),
+		makeKeystroke(firstMs + index * intervalMs, { keyProducesCharacter: true }),
 	);
 }
 

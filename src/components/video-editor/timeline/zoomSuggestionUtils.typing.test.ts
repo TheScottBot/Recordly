@@ -144,23 +144,23 @@ describe("click only recordings are untouched by the typing path", () => {
 	}
 });
 
-describe("typing bursts merged into interaction zoom suggestions", () => {
-	it("extends the end of the click cluster the burst anchors to, keeping the click's focus", () => {
+describe("typing bursts as their own suggestions", () => {
+	const CLICK_AT_5000 = withMoves([makeClick(5_000, 0.3, 0.3)], TOTAL_MS);
+	const CLICK_FOCUS = { cx: 0.3, cy: 0.3 };
+	const CLICK_REGION = { start: 4_500, end: 5_500, focus: CLICK_FOCUS };
+
+	it("creates a region beside the click's own, focused on the anchoring click", () => {
 		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(
-				[
-					makeClick(5_000, 0.3, 0.3),
-					...makeTypingRun(5_500, 40, 150, { cx: 0.9, cy: 0.9 }),
-				],
-				TOTAL_MS,
-			),
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: makeTypingRun(5_500, 40, 150),
 			totalMs: TOTAL_MS,
 			defaultDurationMs: 2_000,
 		});
 
 		expect(result.status).toBe("ok");
 		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 5_500 + 39 * 150 + 500, focus: { cx: 0.3, cy: 0.3 } },
+			CLICK_REGION,
+			{ start: 5_500, end: 11_850, focus: CLICK_FOCUS, trigger: "typing" },
 		]);
 		expect(result.typing).toEqual({
 			burstsDetected: 1,
@@ -170,19 +170,88 @@ describe("typing bursts merged into interaction zoom suggestions", () => {
 		});
 	});
 
-	it("suggests nothing for a burst with no trustworthy focus and counts the decline", () => {
+	it("cuts a typing region short at the next click's region rather than moving it", () => {
 		const result = buildInteractionZoomSuggestions({
 			cursorTelemetry: withMoves(
-				[makeClick(5_000, 0.3, 0.3), ...makeTypingRun(20_000, 20, 100)],
+				[makeClick(5_000, 0.3, 0.3), makeClick(9_000, 0.7, 0.7)],
 				TOTAL_MS,
 			),
+			typingEvents: makeTypingRun(5_500, 50, 150),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		// Both click regions are exactly what they would be without any typing.
+		expect(result.suggestions).toEqual([
+			CLICK_REGION,
+			{ start: 5_500, end: 8_500, focus: CLICK_FOCUS, trigger: "typing" },
+			{ start: 8_500, end: 9_500, focus: { cx: 0.7, cy: 0.7 } },
+		]);
+		expect(result.typing).toMatchObject({ burstsApplied: 1, burstsLimitedByClick: 1 });
+	});
+
+	it("drops a typing region with too little room left beside the click", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: makeTypingRun(5_000, 3, 100),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		expect(result.suggestions).toEqual([CLICK_REGION]);
+		expect(result.typing).toEqual({
+			burstsDetected: 1,
+			burstsApplied: 0,
+			burstsDeclinedForFocus: 0,
+			burstsLimitedByClick: 1,
+		});
+	});
+
+	it("gives a burst after a thinking pause its own region on the same field", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: [...makeTypingRun(5_500, 5, 100), ...makeTypingRun(12_000, 5, 100)],
 			totalMs: TOTAL_MS,
 			defaultDurationMs: 2_000,
 		});
 
 		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 5_500, focus: { cx: 0.3, cy: 0.3 } },
+			CLICK_REGION,
+			{ start: 5_500, end: 6_400, focus: CLICK_FOCUS, trigger: "typing" },
+			{ start: 11_500, end: 12_900, focus: CLICK_FOCUS, trigger: "typing" },
 		]);
+		expect(result.typing).toMatchObject({
+			burstsDetected: 2,
+			burstsApplied: 2,
+			burstsDeclinedForFocus: 0,
+		});
+	});
+
+	it("cuts a typing region short at a reserved span", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: makeTypingRun(5_500, 40, 150),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+			reservedSpans: [{ start: 10_000, end: 11_000 }],
+		});
+
+		expect(result.suggestions).toEqual([
+			CLICK_REGION,
+			{ start: 5_500, end: 10_000, focus: CLICK_FOCUS, trigger: "typing" },
+		]);
+		expect(result.typing).toMatchObject({ burstsApplied: 1, burstsLimitedByClick: 1 });
+	});
+
+	it("suggests nothing for a burst with no trustworthy focus and counts the decline", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: makeTypingRun(20_000, 20, 100),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		expect(result.suggestions).toEqual([CLICK_REGION]);
 		expect(result.typing).toEqual({
 			burstsDetected: 1,
 			burstsApplied: 0,
@@ -193,7 +262,8 @@ describe("typing bursts merged into interaction zoom suggestions", () => {
 
 	it("returns no-interactions for typing with no clicks at all, with the burst counted as declined", () => {
 		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(makeTypingRun(5_000, 20, 100), TOTAL_MS),
+			cursorTelemetry: withMoves([], TOTAL_MS),
+			typingEvents: makeTypingRun(5_000, 20, 100),
 			totalMs: TOTAL_MS,
 			defaultDurationMs: 2_000,
 		});
@@ -208,124 +278,39 @@ describe("typing bursts merged into interaction zoom suggestions", () => {
 		});
 	});
 
-	it("lets a later click cluster win where the extension would run into it", () => {
+	it("still drops the click's own region when it overlaps a reserved span, leaving only the typing region", () => {
 		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(
-				[
-					makeClick(5_000, 0.3, 0.3),
-					...makeTypingRun(5_500, 50, 150),
-					makeClick(9_000, 0.7, 0.7),
-				],
-				TOTAL_MS,
-			),
-			totalMs: TOTAL_MS,
-			defaultDurationMs: 2_000,
-		});
-
-		// The second click's own region, 8500 to 9500, is exactly what it was.
-		// The typing extension stops where that region begins.
-		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 8_500, focus: { cx: 0.3, cy: 0.3 } },
-			{ start: 8_500, end: 9_500, focus: { cx: 0.7, cy: 0.7 } },
-		]);
-		expect(result.typing).toMatchObject({ burstsApplied: 1, burstsLimitedByClick: 1 });
-	});
-
-	it("falls back to the click's own region when the extended region overlaps a reserved span", () => {
-		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(
-				[makeClick(5_000, 0.3, 0.3), ...makeTypingRun(5_500, 50, 150)],
-				TOTAL_MS,
-			),
-			totalMs: TOTAL_MS,
-			defaultDurationMs: 2_000,
-			reservedSpans: [{ start: 10_000, end: 11_000 }],
-		});
-
-		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 5_500, focus: { cx: 0.3, cy: 0.3 } },
-		]);
-		expect(result.typing).toMatchObject({ burstsApplied: 0, burstsLimitedByClick: 1 });
-	});
-
-	it("still drops the click's own region when it overlaps a reserved span, as today", () => {
-		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(
-				[makeClick(5_000, 0.3, 0.3), ...makeTypingRun(5_500, 10, 150)],
-				TOTAL_MS,
-			),
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: makeTypingRun(5_500, 10, 150),
 			totalMs: TOTAL_MS,
 			defaultDurationMs: 2_000,
 			reservedSpans: [{ start: 4_000, end: 6_000 }],
 		});
 
-		expect(result.status).toBe("no-slots");
-		expect(result.suggestions).toEqual([]);
+		// The click region 4500 to 5500 is dropped exactly as it is today. The
+		// typing region survives because it can start after the reserved span.
+		expect(result.suggestions).toEqual([
+			{ start: 6_000, end: 7_350, focus: CLICK_FOCUS, trigger: "typing" },
+		]);
 	});
 
-	it("ignores modifier only key presses that reach the engine, because their flag survives normalisation", () => {
+	it("ignores modifier only key presses, because their flag says they are not typing", () => {
 		const modifierPresses = Array.from({ length: 12 }, (_unusedSlot, index) =>
 			makeKeystroke(5_500 + index * 100, { keyProducesCharacter: false }),
 		);
 		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves([makeClick(5_000, 0.3, 0.3), ...modifierPresses], TOTAL_MS),
+			cursorTelemetry: CLICK_AT_5000,
+			typingEvents: modifierPresses,
 			totalMs: TOTAL_MS,
 			defaultDurationMs: 2_000,
 		});
 
-		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 5_500, focus: { cx: 0.3, cy: 0.3 } },
-		]);
+		expect(result.suggestions).toEqual([CLICK_REGION]);
 		expect(result.typing).toEqual({
 			burstsDetected: 0,
 			burstsApplied: 0,
 			burstsDeclinedForFocus: 0,
 			burstsLimitedByClick: 0,
 		});
-	});
-
-	it("extends each cluster by the burst that anchors to its own click", () => {
-		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(
-				[
-					makeClick(5_000, 0.3, 0.3),
-					...makeTypingRun(5_500, 5, 100),
-					makeClick(9_000, 0.35, 0.35),
-					...makeTypingRun(9_400, 5, 100),
-				],
-				TOTAL_MS,
-			),
-			totalMs: TOTAL_MS,
-			defaultDurationMs: 2_000,
-		});
-
-		// The clicks are 4000 ms apart, beyond the 2500 ms merge gap, so they
-		// form two clusters. Each burst anchors to the click before it and
-		// extends that cluster only.
-		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 5_900 + 500, focus: { cx: 0.3, cy: 0.3 } },
-			{ start: 8_500, end: 9_800 + 500, focus: { cx: 0.35, cy: 0.35 } },
-		]);
-		expect(result.typing).toMatchObject({ burstsDetected: 2, burstsApplied: 2 });
-	});
-
-	it("leaves a cluster alone when its own clicks already run past the burst", () => {
-		const result = buildInteractionZoomSuggestions({
-			cursorTelemetry: withMoves(
-				[
-					makeClick(5_000, 0.3, 0.3),
-					...makeTypingRun(5_200, 3, 100),
-					makeClick(7_000, 0.3, 0.3),
-				],
-				TOTAL_MS,
-			),
-			totalMs: TOTAL_MS,
-			defaultDurationMs: 2_000,
-		});
-
-		expect(result.suggestions).toEqual([
-			{ start: 4_500, end: 7_500, focus: { cx: 0.3, cy: 0.3 } },
-		]);
-		expect(result.typing).toMatchObject({ burstsDetected: 1, burstsApplied: 1 });
 	});
 });

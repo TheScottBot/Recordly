@@ -10,6 +10,7 @@
  * nothing for it: a missing zoom is neutral, a wrong one is a defect.
  */
 
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
 import type { CursorTelemetryPoint, ZoomFocus } from "../types";
 import { clusterByTimeGap } from "./timeGapClustering";
 import { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionConstants";
@@ -21,6 +22,15 @@ export const TYPING_BURST_MERGE_GAP_MS = CLICK_CLUSTER_MERGE_GAP_MS;
 export const TYPING_BURST_PAD_MS = CLICK_CLUSTER_PAD_MS;
 /** How long before the first keystroke a click may be and still count as the field the person typed into. */
 export const TYPING_ANCHOR_WINDOW_MS = 2_500;
+/**
+ * How long a person may pause and still be typing into the same field. A
+ * burst that begins within this of the previous burst's last keystroke, with
+ * no click in between, keeps that burst's focus rather than being declined.
+ * Ten seconds covers the think pause in the author's recording of 23
+ * September 2026, where a 4.7 second pause split one session in two; it is a
+ * starting point to be adjusted against further recordings.
+ */
+export const TYPING_SESSION_CARRY_MS = 10_000;
 /** Below a plain click's 900, so a click always supplies the focus when the two compete. */
 export const TYPING_CANDIDATE_STRENGTH = 700;
 
@@ -30,7 +40,10 @@ export interface TypingBurst {
 	keystrokeCount: number;
 }
 
-export type TypingFocusRule = "anchored-to-preceding-click" | "no-trustworthy-focus";
+export type TypingFocusRule =
+	| "anchored-to-preceding-click"
+	| "inherited-from-typing-session"
+	| "no-trustworthy-focus";
 
 export interface TypingBurstFocus {
 	focus: ZoomFocus | null;
@@ -46,11 +59,11 @@ export interface TypingBurstCandidate {
 	strength: number;
 }
 
-function isTypingKeystroke(sample: CursorTelemetryPoint): boolean {
+function isTypingKeystroke(event: TypingEvent): boolean {
 	// A false flag is a modifier, arrow or function key and is not typing. An
 	// absent flag is a capture path that could not classify, which is not a
-	// reason to ignore a keystroke it did record.
-	return sample.interactionType === "keystroke" && sample.keyProducesCharacter !== false;
+	// reason to ignore a key press it did record.
+	return event.keyProducesCharacter !== false;
 }
 
 function isAnchorClick(sample: CursorTelemetryPoint): boolean {
@@ -58,10 +71,10 @@ function isAnchorClick(sample: CursorTelemetryPoint): boolean {
 	return sample.interactionType === "click" || sample.interactionType === "double-click";
 }
 
-export function detectTypingBursts(samples: readonly CursorTelemetryPoint[]): TypingBurst[] {
-	const keystrokes = samples.filter(isTypingKeystroke);
+export function detectTypingBursts(typingEvents: readonly TypingEvent[]): TypingBurst[] {
+	const keystrokes = typingEvents.filter(isTypingKeystroke);
 
-	return clusterByTimeGap(keystrokes, (sample) => sample.timeMs, TYPING_BURST_MERGE_GAP_MS)
+	return clusterByTimeGap(keystrokes, (event) => event.timeMs, TYPING_BURST_MERGE_GAP_MS)
 		.filter((cluster) => cluster.length >= TYPING_BURST_MIN_KEYSTROKES)
 		.map((cluster) => ({
 			firstKeystrokeMs: cluster[0].timeMs,
@@ -106,16 +119,48 @@ export function deriveTypingBurstFocus(
  * them silently.
  */
 export function buildTypingBurstCandidates(
+	typingEvents: readonly TypingEvent[],
 	samples: readonly CursorTelemetryPoint[],
 ): TypingBurstCandidate[] {
-	return detectTypingBursts(samples).map((burst) => {
-		const derivedFocus = deriveTypingBurstFocus(burst, samples);
-		return {
+	const candidates: TypingBurstCandidate[] = [];
+	let previousBurst: TypingBurst | null = null;
+	let previousFocus: TypingBurstFocus | null = null;
+
+	for (const burst of detectTypingBursts(typingEvents)) {
+		let derivedFocus = deriveTypingBurstFocus(burst, samples);
+
+		const burstBefore = previousBurst;
+		if (derivedFocus.focus === null && burstBefore !== null && previousFocus?.focus) {
+			const pauseMs = burst.firstKeystrokeMs - burstBefore.lastKeystrokeMs;
+			// A click between the two bursts would have been found by
+			// deriveTypingBurstFocus and is always the better anchor, so reaching
+			// here means there was none inside the anchor window.
+			const clickIntervened = samples.some(
+				(sample) =>
+					isAnchorClick(sample) &&
+					sample.timeMs > burstBefore.lastKeystrokeMs &&
+					sample.timeMs <= burst.firstKeystrokeMs,
+			);
+
+			if (pauseMs <= TYPING_SESSION_CARRY_MS && !clickIntervened) {
+				derivedFocus = {
+					focus: previousFocus.focus,
+					rule: "inherited-from-typing-session",
+					anchorClickTimeMs: previousFocus.anchorClickTimeMs,
+				};
+			}
+		}
+
+		candidates.push({
 			burst,
 			focus: derivedFocus.focus,
 			focusRule: derivedFocus.rule,
 			anchorClickTimeMs: derivedFocus.anchorClickTimeMs,
 			strength: TYPING_CANDIDATE_STRENGTH,
-		};
-	});
+		});
+		previousBurst = burst;
+		previousFocus = derivedFocus;
+	}
+
+	return candidates;
 }

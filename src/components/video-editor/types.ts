@@ -7,6 +7,13 @@ export interface ZoomFocus {
 
 export type ZoomMode = "auto" | "manual";
 
+/**
+ * What produced a suggested zoom. Absent on a region added by hand and on
+ * every region saved before typing zooms existed, both of which are click
+ * zooms as far as the timeline is concerned.
+ */
+export type ZoomTrigger = "click" | "typing";
+
 export interface ZoomRegion {
 	id: string;
 	startMs: number;
@@ -14,6 +21,7 @@ export interface ZoomRegion {
 	depth: ZoomDepth;
 	focus: ZoomFocus;
 	mode?: ZoomMode;
+	trigger?: ZoomTrigger;
 }
 
 export type { CursorTelemetryPoint } from "@/lib/cursorTelemetryContract";

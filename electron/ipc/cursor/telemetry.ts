@@ -61,13 +61,6 @@ export function normalizeCursorTelemetrySamples(rawSamples: unknown): CursorTele
 				interactionType: isCursorInteractionType(point.interactionType)
 					? point.interactionType
 					: undefined,
-				// The character flag is meaningful only on a keystroke; anywhere else it
-				// is noise, and a non boolean is a malformed write that must not persist.
-				keyProducesCharacter:
-					point.interactionType === "keystroke" &&
-					typeof point.keyProducesCharacter === "boolean"
-						? point.keyProducesCharacter
-						: undefined,
 				cursorType:
 					point.cursorType === "arrow" ||
 					point.cursorType === "text" ||
@@ -290,7 +283,6 @@ export function pushCursorSample(
 	timeMs: number,
 	interactionType: CursorInteractionType = "move",
 	cursorType?: CursorVisualType,
-	keyProducesCharacter?: boolean,
 ) {
 	activeCursorSamples.push({
 		timeMs: Math.max(0, timeMs),
@@ -298,8 +290,6 @@ export function pushCursorSample(
 		cy,
 		interactionType,
 		cursorType: cursorType ?? currentCursorVisualType,
-		// Only a keystroke may carry the flag; the writer erases it anywhere else.
-		keyProducesCharacter: interactionType === "keystroke" ? keyProducesCharacter : undefined,
 	} as CursorTelemetryPoint);
 
 	if (activeCursorSamples.length > MAX_CURSOR_SAMPLES) {

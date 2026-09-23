@@ -19,6 +19,7 @@ import type {
 	UiohookModuleNamespace,
 } from "../types";
 import { buildCharacterProducingKeycodeSet } from "./keyboardCapture";
+import { pushTypingEvent } from "./typingTelemetry";
 import {
 	getCursorCaptureElapsedMs,
 	getHookCursorScreenPoint,
@@ -234,30 +235,17 @@ export function recordCursorMouseUp() {
 }
 
 /**
- * Records that a key was pressed: the capture clock time, where the pointer
- * was, and whether the key produces a character. Nothing about which key.
- * The pointer position is recorded so the sample sits on the rendered cursor
- * path exactly where a mouseup sample would; a keystroke has no position of
- * its own and the suggestion engine never treats this one as the focus.
+ * Records that a key was pressed: the time on the capture clock, and whether
+ * the key produces a character. Nothing about which key, and no position: a
+ * key press has no position of its own, and the focus of a typing zoom comes
+ * from the click that preceded it.
  */
-export function recordCursorKeystroke(keyProducesCharacter: boolean) {
+export function recordTypingEvent(keyProducesCharacter: boolean) {
 	if (!isCursorCaptureActive || isCursorCapturePaused()) {
 		return;
 	}
 
-	const point = getNormalizedCursorPoint();
-	if (!point) {
-		return;
-	}
-
-	pushCursorSample(
-		point.cx,
-		point.cy,
-		getCursorCaptureElapsedMs(),
-		"keystroke",
-		undefined,
-		keyProducesCharacter,
-	);
+	pushTypingEvent(getCursorCaptureElapsedMs(), keyProducesCharacter);
 }
 
 export interface StartInteractionCaptureOptions {
@@ -342,7 +330,7 @@ export async function startInteractionCapture(options: StartInteractionCaptureOp
 		const onKeyDown = (event: HookKeyboardEvent) => {
 			const keyProducesCharacter =
 				typeof event?.keycode === "number" && characterProducingKeycodes.has(event.keycode);
-			recordCursorKeystroke(keyProducesCharacter);
+			recordTypingEvent(keyProducesCharacter);
 		};
 
 		hook.on("mousedown", onMouseDown);

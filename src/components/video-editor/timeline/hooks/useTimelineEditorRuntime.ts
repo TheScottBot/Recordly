@@ -1,3 +1,4 @@
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
 import type { Span } from "dnd-timeline";
 import type { ForwardedRef, RefObject } from "react";
 import { useCallback, useImperativeHandle } from "react";
@@ -10,6 +11,7 @@ import type {
 	SpeedRegion,
 	TrimRegion,
 	ZoomFocus,
+	ZoomTrigger,
 	ZoomRegion,
 } from "../../types";
 import type { TimelineShortcutBindings } from "../core/timelineTypes";
@@ -29,12 +31,13 @@ interface UseTimelineEditorRuntimeParams {
 	currentTimeMs: number;
 	safeMinDurationMs: number;
 	cursorTelemetry: CursorTelemetryPoint[];
+	typingEvents?: TypingEvent[];
 	autoSuggestZoomsTrigger: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	disableSuggestedZooms: boolean;
 	zoomRegions: ZoomRegion[];
 	onZoomAdded: (span: Span) => void;
-	onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
+	onZoomSuggested?: (span: Span, focus: ZoomFocus, trigger?: ZoomTrigger) => void;
 	onZoomSpanChange: (id: string, span: Span) => void;
 	onZoomDelete: (id: string) => void;
 	selectedZoomId: string | null;
@@ -79,6 +82,7 @@ export function useTimelineEditorRuntime({
 	currentTimeMs,
 	safeMinDurationMs,
 	cursorTelemetry,
+	typingEvents,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
 	disableSuggestedZooms,
@@ -214,6 +218,7 @@ export function useTimelineEditorRuntime({
 		timeline: { videoDuration, totalMs, currentTimeMs },
 		regions: { zoom: zoomRegions, clip: clipRegions },
 		cursorTelemetry,
+		typingEvents,
 		options: { disableSuggestedZooms },
 		autoSuggestZoomsTrigger,
 		onAutoSuggestZoomsConsumed,

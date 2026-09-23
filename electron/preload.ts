@@ -608,6 +608,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setCursorScale: (scale: number) => {
 		return ipcRenderer.invoke("set-cursor-scale", scale);
 	},
+	getTypingTelemetry: (videoPath?: string) => {
+		return ipcRenderer.invoke("get-typing-telemetry", videoPath);
+	},
 	getCursorTelemetry: (videoPath?: string) => {
 		return ipcRenderer.invoke("get-cursor-telemetry", videoPath);
 	},

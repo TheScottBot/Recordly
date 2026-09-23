@@ -12,6 +12,7 @@ import { currentVideoPath } from "../state";
 import {
 	getRecordingsDir,
 	getTelemetryPathForVideo,
+	getTypingTelemetryPathForVideo,
 	isAutoRecordingPath,
 	normalizePath,
 	normalizeVideoSourcePath,
@@ -170,6 +171,8 @@ export async function pruneAutoRecordings(exemptPaths: string[] = []) {
 		try {
 			await fs.rm(entry.filePath, { force: true });
 			await fs.rm(getTelemetryPathForVideo(entry.filePath), { force: true });
+			// Keyboard derived data must not outlive the recording it came from.
+			await fs.rm(getTypingTelemetryPathForVideo(entry.filePath), { force: true });
 			// Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
 			const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, "");
 			const companionSuffixes = Array.from(

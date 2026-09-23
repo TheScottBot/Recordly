@@ -21,33 +21,3 @@ export const VERSION_TWO_SIDECAR_SAMPLES: CursorTelemetryPoint[] = [
 export function buildVersionTwoSidecar(): { version: number; samples: CursorTelemetryPoint[] } {
 	return { version: 2, samples: VERSION_TWO_SIDECAR_SAMPLES.map((sample) => ({ ...sample })) };
 }
-
-export const VERSION_THREE_KEYSTROKE_SAMPLES: CursorTelemetryPoint[] = [
-	{ timeMs: 0, cx: 0.4, cy: 0.6, interactionType: "move", cursorType: "arrow" },
-	{ timeMs: 66, cx: 0.4, cy: 0.6, interactionType: "click", cursorType: "text" },
-	{ timeMs: 140, cx: 0.4, cy: 0.6, interactionType: "mouseup", cursorType: "text" },
-	{
-		timeMs: 900,
-		cx: 0.4,
-		cy: 0.6,
-		interactionType: "keystroke",
-		cursorType: "text",
-		keyProducesCharacter: true,
-	},
-	{
-		timeMs: 1_050,
-		cx: 0.4,
-		cy: 0.6,
-		interactionType: "keystroke",
-		cursorType: "text",
-		keyProducesCharacter: false,
-	},
-];
-
-/** The parsed shape of a sidecar written with keystroke samples by this work. */
-export function buildVersionThreeSidecar(): { version: number; samples: CursorTelemetryPoint[] } {
-	return {
-		version: 3,
-		samples: VERSION_THREE_KEYSTROKE_SAMPLES.map((sample) => ({ ...sample })),
-	};
-}

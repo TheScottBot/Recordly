@@ -1,4 +1,5 @@
-import type { CursorTelemetryPoint, ZoomFocus } from "../types";
+import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CursorTelemetryPoint, ZoomFocus, ZoomTrigger } from "../types";
 import { clusterByTimeGap } from "./timeGapClustering";
 import { buildTypingBurstCandidates, type TypingBurstCandidate } from "./typingBurstUtils";
 import { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionConstants";
@@ -32,6 +33,12 @@ export interface SuggestedZoomRegion {
 	start: number;
 	end: number;
 	focus: ZoomFocus;
+	/**
+	 * Present only on a region typing produced. A click region carries no
+	 * trigger, so a recording with no typing yields byte for byte the
+	 * suggestions it always did.
+	 */
+	trigger?: ZoomTrigger;
 }
 
 export type InteractionZoomSuggestionStatus =
@@ -104,20 +111,13 @@ function normalizeTelemetrySample(
 	sample: CursorTelemetryPoint,
 	totalMs: number,
 ): CursorTelemetryPoint {
-	const normalized: CursorTelemetryPoint = {
+	return {
 		timeMs: Math.max(0, Math.min(sample.timeMs, totalMs)),
 		cx: Math.max(0, Math.min(sample.cx, 1)),
 		cy: Math.max(0, Math.min(sample.cy, 1)),
 		interactionType: sample.interactionType,
 		cursorType: sample.cursorType,
 	};
-	// The character flag must survive normalisation or every keystroke would
-	// read as typing, modifiers and shortcuts included. Only set when present
-	// so click only samples keep exactly the shape they always had.
-	if (sample.keyProducesCharacter !== undefined) {
-		normalized.keyProducesCharacter = sample.keyProducesCharacter;
-	}
-	return normalized;
 }
 
 function applyCursorTypeInRange(
@@ -355,76 +355,89 @@ function buildClickClusters(
  * click it anchors to, and no further than the start of the next cluster's
  * region, so a later click always keeps the region it would have had.
  */
-interface TypingExtendedCluster {
-	firstMs: number;
-	/** The cluster's own end, from its clicks alone. */
-	clickLastMs: number;
-	/** The end after typing, never earlier than `clickLastMs`. */
-	lastMs: number;
-	focus: ZoomFocus;
-	/** Bursts whose typing the extended region covers; moved to limited if the extension is reverted. */
-	typingBurstsApplied: number;
-}
+/**
+ * A typing region shorter than this is not worth a zoom of its own: it would
+ * flash past between the click region it sits beside and whatever follows.
+ */
+export const MIN_TYPING_REGION_MS = 400;
 
-function extendClustersWithTypingBursts(
-	clusters: Array<{ firstMs: number; lastMs: number; focus: ZoomFocus }>,
-	typingCandidates: TypingBurstCandidate[],
-	padMs: number,
-): { clusters: TypingExtendedCluster[]; burstsLimitedByClick: number } {
-	const extended: TypingExtendedCluster[] = clusters.map((cluster) => ({
-		firstMs: cluster.firstMs,
-		clickLastMs: cluster.lastMs,
-		lastMs: cluster.lastMs,
-		focus: cluster.focus,
-		typingBurstsApplied: 0,
-	}));
+/**
+ * Turns typing bursts into regions of their own, beside the click regions
+ * rather than merged into them, which is what the author asked for on
+ * 23 September 2026 after seeing merged regions on a real recording.
+ *
+ * A click region always keeps the span it would have had without any typing.
+ * A typing region is the burst padded, then moved past anything it starts
+ * inside and cut short at the first thing it runs into. It is never split
+ * and never pushes anything else aside.
+ */
+function buildTypingRegions(params: {
+	typingCandidates: TypingBurstCandidate[];
+	occupiedSpans: Array<{ start: number; end: number }>;
+	totalMs: number;
+	padMs: number;
+}): { regions: SuggestedZoomRegion[]; burstsLimitedByClick: number } {
+	const { typingCandidates, occupiedSpans, totalMs, padMs } = params;
+	const regions: SuggestedZoomRegion[] = [];
 	let burstsLimitedByClick = 0;
 
 	for (const candidate of typingCandidates) {
-		if (candidate.anchorClickTimeMs === null) {
+		if (candidate.focus === null) {
 			continue;
 		}
 
-		const anchorClickTimeMs = candidate.anchorClickTimeMs;
-		// Every click sample is in exactly one cluster, so the anchor is found by
-		// the cluster's own click span, not its typing extended one.
-		const clusterIndex = extended.findIndex(
-			(cluster) =>
-				anchorClickTimeMs >= cluster.firstMs && anchorClickTimeMs <= cluster.clickLastMs,
-		);
-		if (clusterIndex === -1) {
-			continue;
+		const requestedStart = Math.max(0, candidate.burst.firstKeystrokeMs - padMs);
+		const requestedEnd = Math.min(totalMs, candidate.burst.lastKeystrokeMs + padMs);
+		let start = requestedStart;
+		let end = requestedEnd;
+
+		// Move past anything the burst starts inside, then stop at the first
+		// thing ahead of it. Both leave the other region untouched.
+		for (const span of occupiedSpans) {
+			if (start < span.end && end > span.start) {
+				if (span.start <= start) {
+					start = span.end;
+				} else {
+					end = Math.min(end, span.start);
+				}
+			}
 		}
 
-		const cluster = extended[clusterIndex];
-		const nextCluster = extended[clusterIndex + 1];
-		// The extended region ends at lastMs + padMs and the next region starts
-		// at its firstMs - padMs; keeping them apart bounds lastMs by two paddings.
-		const latestAllowedLastMs =
-			nextCluster === undefined
-				? Number.POSITIVE_INFINITY
-				: nextCluster.firstMs - padMs - padMs;
-		const requestedLastMs = candidate.burst.lastKeystrokeMs;
-		const grantedLastMs = Math.min(requestedLastMs, latestAllowedLastMs);
+		// Losing padding is not a loss worth counting; failing to cover the
+		// typing itself is, and so is being dropped entirely.
+		const coversTheTyping =
+			start <= candidate.burst.firstKeystrokeMs && end >= candidate.burst.lastKeystrokeMs;
+		const hasRoom = end - start >= MIN_TYPING_REGION_MS;
 
-		if (grantedLastMs < requestedLastMs) {
+		if (!coversTheTyping || !hasRoom) {
 			burstsLimitedByClick += 1;
 		}
-		if (grantedLastMs > cluster.lastMs) {
-			cluster.lastMs = grantedLastMs;
+
+		if (!hasRoom) {
+			continue;
 		}
-		// Applied when the region now covers the typing at all: extended past
-		// the clicks, or the clicks already ran past it.
-		if (grantedLastMs > cluster.clickLastMs || requestedLastMs <= cluster.clickLastMs) {
-			cluster.typingBurstsApplied += 1;
-		}
+
+		const region: SuggestedZoomRegion = {
+			start,
+			end,
+			focus: candidate.focus,
+			trigger: "typing",
+		};
+		regions.push(region);
+		occupiedSpans.push({ start, end });
 	}
 
-	return { clusters: extended, burstsLimitedByClick };
+	return { regions, burstsLimitedByClick };
 }
 
 export function buildInteractionZoomSuggestions(params: {
 	cursorTelemetry: CursorTelemetryPoint[];
+	/**
+	 * Read from the recording's own typing sidecar. Absent or empty means the
+	 * recording held no typing, and the result then carries no typing summary,
+	 * exactly as it did before this feature existed.
+	 */
+	typingEvents?: TypingEvent[];
 	totalMs: number;
 	defaultDurationMs: number;
 	reservedSpans?: Array<{ start: number; end: number }>;
@@ -434,6 +447,7 @@ export function buildInteractionZoomSuggestions(params: {
 }): InteractionZoomSuggestionResult {
 	const {
 		cursorTelemetry,
+		typingEvents = [],
 		totalMs,
 		reservedSpans = [],
 		mergeGapMs = CLICK_CLUSTER_MERGE_GAP_MS,
@@ -463,10 +477,10 @@ export function buildInteractionZoomSuggestions(params: {
 
 	// The typing summary exists only when keystrokes were present, so a
 	// recording with no typing returns exactly the shape it always has.
-	const hasKeystrokes = normalizedSamples.some(
-		(sample) => sample.interactionType === "keystroke",
-	);
-	const typingCandidates = hasKeystrokes ? buildTypingBurstCandidates(normalizedSamples) : [];
+	const hasKeystrokes = typingEvents.length > 0;
+	const typingCandidates = hasKeystrokes
+		? buildTypingBurstCandidates(typingEvents, normalizedSamples)
+		: [];
 	const typingSummary: TypingSuggestionSummary | undefined = hasKeystrokes
 		? {
 				burstsDetected: typingCandidates.length,
@@ -487,50 +501,47 @@ export function buildInteractionZoomSuggestions(params: {
 	}
 
 	// Group nearby clicks into clusters, then derive zoom windows from those clusters
-	const clickClusters = buildClickClusters(clickCandidates, mergeGapMs);
-	const extension = extendClustersWithTypingBursts(clickClusters, typingCandidates, padMs);
-	if (typingSummary !== undefined) {
-		typingSummary.burstsLimitedByClick += extension.burstsLimitedByClick;
-	}
+	const clusters = buildClickClusters(clickCandidates, mergeGapMs);
 
 	const reserved = [...reservedSpans].sort((a, b) => a.start - b.start);
 	const suggestions: SuggestedZoomRegion[] = [];
 
-	for (const cluster of extension.clusters) {
+	for (const cluster of clusters) {
 		const regionStart = Math.max(0, cluster.firstMs - padMs);
-		let regionEnd = Math.min(totalMs, cluster.lastMs + padMs);
+		const regionEnd = Math.min(totalMs, cluster.lastMs + padMs);
 
 		if (regionEnd <= regionStart) {
 			continue;
 		}
 
-		const overlapsReserved = (end: number) =>
-			reserved.some((span) => end > span.start && regionStart < span.end);
+		const hasOverlap = reserved.some(
+			(span) => regionEnd > span.start && regionStart < span.end,
+		);
 
-		if (overlapsReserved(regionEnd) && cluster.lastMs > cluster.clickLastMs) {
-			// The typing extension ran into a reserved span. The click's own
-			// region is tried on its own, exactly as it would have been without
-			// typing, and the bursts it was carrying are counted as limited.
-			regionEnd = Math.min(totalMs, cluster.clickLastMs + padMs);
-			if (typingSummary !== undefined) {
-				typingSummary.burstsLimitedByClick += cluster.typingBurstsApplied;
-			}
-			cluster.typingBurstsApplied = 0;
-		}
-
-		if (overlapsReserved(regionEnd)) {
+		if (hasOverlap) {
 			continue;
 		}
 
-		if (typingSummary !== undefined) {
-			typingSummary.burstsApplied += cluster.typingBurstsApplied;
-		}
 		reserved.push({ start: regionStart, end: regionEnd });
 		suggestions.push({
 			start: regionStart,
 			end: regionEnd,
 			focus: cluster.focus,
 		});
+	}
+
+	// Typing regions are placed after every click region, so the clicks keep
+	// the spans they would have had and typing takes only what is left.
+	if (typingSummary !== undefined) {
+		const typingRegions = buildTypingRegions({
+			typingCandidates,
+			occupiedSpans: reserved,
+			totalMs,
+			padMs,
+		});
+		typingSummary.burstsApplied += typingRegions.regions.length;
+		typingSummary.burstsLimitedByClick += typingRegions.burstsLimitedByClick;
+		suggestions.push(...typingRegions.regions);
 	}
 
 	if (suggestions.length === 0) {
