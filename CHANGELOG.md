@@ -77,6 +77,12 @@ were cleared at which commit.
   outright, and moved every other typing zoom off a click at the very bottom
   edge of the screen and onto the text. A recording with no track behaves
   exactly as it did.
+- Exports follow the caret. The track reached the preview and no export at
+  all: every export path hands its configuration to a renderer by copying
+  fields one at a time, and the track was added to all three configuration
+  types and to none of the three copies, which compiles perfectly. What the
+  camera needs is now declared once in `cameraInputs.ts` and spread, so a new
+  camera input reaches every path or none of them.
 - A typing zoom opens already pointed at the text. It used to open on the
   click that anchored the typing and then move to where the caret actually
   was, which read as the zoom going to the middle and then centring on the

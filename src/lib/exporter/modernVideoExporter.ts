@@ -54,6 +54,7 @@ import {
 	shouldPreferNativeAutoBackend,
 	shouldPreferNativeStaticLayoutBeforeBreeze,
 } from "./backendPolicy";
+import { buildCameraInputs } from "./cameraInputs";
 import { requiresClipTimelineRendering } from "./clipTimeline";
 import { buildEditedTrackSourceSegments, classifyEditedTrackStrategy } from "./editedTrackStrategy";
 import {
@@ -637,7 +638,7 @@ export class ModernVideoExporter {
 					speedRegions: this.config.speedRegions,
 					previewWidth: this.config.previewWidth,
 					previewHeight: this.config.previewHeight,
-					cursorTelemetry: this.config.cursorTelemetry,
+					...buildCameraInputs(this.config),
 					showCursor: this.config.showCursor,
 					cursorStyle: this.config.cursorStyle,
 					cursorSize: this.config.cursorSize,

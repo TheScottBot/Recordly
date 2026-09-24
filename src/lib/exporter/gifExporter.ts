@@ -1,4 +1,5 @@
 import GIF from "gif.js";
+import { buildCameraInputs } from "./cameraInputs";
 import type { CaretSample } from "@/lib/typingTelemetryContract";
 import type {
 	AnnotationRegion,
@@ -171,7 +172,7 @@ export function buildGifFrameRendererConfig(
 		speedRegions: config.speedRegions,
 		previewWidth: config.previewWidth,
 		previewHeight: config.previewHeight,
-		cursorTelemetry: config.cursorTelemetry,
+		...buildCameraInputs(config),
 		showCursor: config.showCursor,
 		cursorStyle: config.cursorStyle,
 		cursorSize: config.cursorSize,

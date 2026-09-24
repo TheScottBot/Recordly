@@ -1,4 +1,5 @@
 import { requiresClipTimelineRendering } from "./clipTimeline";
+import { buildCameraInputs } from "./cameraInputs";
 import type {
 	AnnotationRegion,
 	AudioRegion,
@@ -250,7 +251,7 @@ export class VideoExporter {
 				speedRegions: this.config.speedRegions,
 				previewWidth: this.config.previewWidth,
 				previewHeight: this.config.previewHeight,
-				cursorTelemetry: this.config.cursorTelemetry,
+				...buildCameraInputs(this.config),
 				showCursor: this.config.showCursor,
 				cursorStyle: this.config.cursorStyle,
 				cursorSize: this.config.cursorSize,
