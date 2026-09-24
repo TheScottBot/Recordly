@@ -1,4 +1,4 @@
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import type { Span } from "dnd-timeline";
 import { useCallback, useEffect, useMemo } from "react";
 import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion, ZoomTrigger } from "../../../types";
@@ -17,6 +17,7 @@ interface UseTimelineZoomActionsParams {
 	};
 	cursorTelemetry: CursorTelemetryPoint[];
 	typingEvents?: TypingEvent[];
+	caretTrack?: readonly CaretSample[];
 	options: {
 		disableSuggestedZooms: boolean;
 	};
@@ -31,6 +32,7 @@ export function useTimelineZoomActions({
 	regions,
 	cursorTelemetry,
 	typingEvents,
+	caretTrack,
 	options,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
@@ -143,6 +145,7 @@ export function useTimelineZoomActions({
 		const result = buildInteractionZoomSuggestions({
 			cursorTelemetry,
 			typingEvents,
+			caretTrack,
 			totalMs,
 			defaultDurationMs: defaultDuration,
 			reservedSpans: zoomRegions
@@ -188,6 +191,7 @@ export function useTimelineZoomActions({
 		onZoomSuggested,
 		cursorTelemetry,
 		typingEvents,
+		caretTrack,
 		defaultRegionDurationMs,
 		zoomRegions,
 	]);

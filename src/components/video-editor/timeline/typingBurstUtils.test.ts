@@ -289,3 +289,72 @@ describe("a typing session that pauses keeps the field it was typing into", () =
 		]);
 	});
 });
+
+describe("the caret says where a burst was, when there is a caret", () => {
+	const TYPED = makeTypingRun(10_000, 6, 120);
+
+	/**
+	 * The rule that a burst with no preceding click has no trustworthy focus
+	 * was written when a click was the only evidence there was. A caret track
+	 * is better evidence than a click, and a burst that has one no longer
+	 * needs a click at all.
+	 *
+	 * The author found this on 24 September 2026: they selected a page of text
+	 * and typed over it, and that burst got no zoom, while its two caret
+	 * samples sat in the sidecar saying exactly where it was.
+	 */
+	it("gives a burst with no click at all the focus its caret reports", () => {
+		const candidates = buildTypingBurstCandidates(
+			TYPED,
+			[],
+			[
+				{ timeMs: 10_100, cx: 0.12, cy: 0.205 },
+				{ timeMs: 10_400, cx: 0.14, cy: 0.205 },
+			],
+		);
+
+		expect(candidates).toHaveLength(1);
+		expect(candidates[0].focusRule).toBe("taken-from-the-caret");
+		expect(candidates[0].focus).toEqual({ cx: 0.12, cy: 0.205 });
+	});
+
+	it("prefers the caret to a click, because the click is only a guess at the field", () => {
+		const candidates = buildTypingBurstCandidates(
+			TYPED,
+			[makeClick(9_000, 0.8, 0.8)],
+			[{ timeMs: 10_100, cx: 0.12, cy: 0.205 }],
+		);
+
+		expect(candidates[0].focusRule).toBe("taken-from-the-caret");
+		expect(candidates[0].focus).toEqual({ cx: 0.12, cy: 0.205 });
+	});
+
+	it("ignores a caret that belongs to different typing", () => {
+		const candidates = buildTypingBurstCandidates(
+			TYPED,
+			[makeClick(9_000, 0.8, 0.8)],
+			[
+				{ timeMs: 500, cx: 0.9, cy: 0.9 },
+				{ timeMs: 40_000, cx: 0.1, cy: 0.1 },
+			],
+		);
+
+		expect(candidates[0].focusRule).toBe("anchored-to-preceding-click");
+		expect(candidates[0].focus).toEqual({ cx: 0.8, cy: 0.8 });
+	});
+
+	it("behaves exactly as before for a recording that carries no track", () => {
+		const withoutTrack = buildTypingBurstCandidates(TYPED, [makeClick(9_000, 0.8, 0.8)]);
+		const withEmptyTrack = buildTypingBurstCandidates(TYPED, [makeClick(9_000, 0.8, 0.8)], []);
+
+		expect(withoutTrack).toEqual(withEmptyTrack);
+		expect(withoutTrack[0].focusRule).toBe("anchored-to-preceding-click");
+	});
+
+	it("still refuses a burst that has neither a caret nor a click", () => {
+		const candidates = buildTypingBurstCandidates(TYPED, [], []);
+
+		expect(candidates[0].focusRule).toBe("no-trustworthy-focus");
+		expect(candidates[0].focus).toBeNull();
+	});
+});

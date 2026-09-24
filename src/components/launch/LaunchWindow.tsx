@@ -76,6 +76,8 @@ function LaunchWindowContent() {
 		setWebcamEnabled,
 		webcamDeviceId,
 		setWebcamDeviceId,
+		keyboardCaptureEnabled,
+		setKeyboardCaptureEnabled,
 		countdownDelay,
 		setCountdownDelay,
 		preparePermissions,
@@ -377,6 +379,14 @@ function LaunchWindowContent() {
 				hideHudFromCapture={hideHudFromCapture}
 				onToggleHudCaptureProtection={() => {
 					void toggleHudCaptureProtection();
+				}}
+				// macOS never registers the global keyboard hook, so there is
+				// nothing there to offer. See PRIVACY.md.
+				supportsKeyboardCapture={platform !== "darwin"}
+				keyboardCaptureEnabled={keyboardCaptureEnabled}
+				keyboardCaptureLocked={recording}
+				onToggleKeyboardCapture={() => {
+					setKeyboardCaptureEnabled(!keyboardCaptureEnabled);
 				}}
 				onChooseRecordingsDirectory={() => {
 					void chooseRecordingsDirectory();

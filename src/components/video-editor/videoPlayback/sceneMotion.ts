@@ -118,6 +118,7 @@ export function resolveSceneZoomTarget({
 			focus = resolveCaretFollowFocus({
 				caretTrack: caretTrack ?? [],
 				regionStartMs: region.startMs,
+				regionEndMs: region.endMs,
 				timeMs: cursorTimeMs,
 				anchorFocus: region.focus,
 				zoomScale: scale,

@@ -1,4 +1,4 @@
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import type { Span } from "dnd-timeline";
 import type { ForwardedRef, RefObject } from "react";
 import { useCallback, useImperativeHandle } from "react";
@@ -32,6 +32,7 @@ interface UseTimelineEditorRuntimeParams {
 	safeMinDurationMs: number;
 	cursorTelemetry: CursorTelemetryPoint[];
 	typingEvents?: TypingEvent[];
+	caretTrack?: readonly CaretSample[];
 	autoSuggestZoomsTrigger: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	disableSuggestedZooms: boolean;
@@ -83,6 +84,7 @@ export function useTimelineEditorRuntime({
 	safeMinDurationMs,
 	cursorTelemetry,
 	typingEvents,
+	caretTrack,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
 	disableSuggestedZooms,
@@ -219,6 +221,7 @@ export function useTimelineEditorRuntime({
 		regions: { zoom: zoomRegions, clip: clipRegions },
 		cursorTelemetry,
 		typingEvents,
+		caretTrack,
 		options: { disableSuggestedZooms },
 		autoSuggestZoomsTrigger,
 		onAutoSuggestZoomsConsumed,

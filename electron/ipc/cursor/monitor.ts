@@ -20,6 +20,7 @@ import {
 } from "./caretSamplingControl";
 import { normalizeCaretScreenPoint, pushCaretSample } from "./caretTelemetry";
 import { parseCursorMonitorLine } from "./cursorMonitorProtocol";
+import { writeHelperCommand } from "./helperStdin";
 import { recordCursorMouseDown, recordCursorMouseUp } from "./interaction";
 import { getCursorCaptureElapsedMs, isCursorCapturePaused } from "./telemetry";
 
@@ -100,11 +101,9 @@ export function stopNativeCursorMonitor() {
 		return;
 	}
 
-	try {
-		nativeCursorMonitorProcess.stdin.write("stop\n");
-	} catch {
-		// ignore stop signal issues
-	}
+	// Guarded for the same reason as the caret commands: this write can fail
+	// asynchronously, and a try/catch around it never sees that.
+	writeHelperCommand(nativeCursorMonitorProcess.stdin, "stop");
 	try {
 		nativeCursorMonitorProcess.kill();
 	} catch {
@@ -177,15 +176,18 @@ export async function startNativeCursorMonitor() {
 			setActiveCaretSamplingControl(
 				createCaretSamplingControl({
 					send: (command) => {
-						try {
-							spawned.stdin?.write(`${command}\n`);
-						} catch {
-							// A helper that has gone needs no telling to stop.
-						}
+						writeHelperCommand(spawned.stdin, command);
 					},
 				}),
 			);
 		}
+
+		// Node turns an error event with no listener into an uncaught exception,
+		// which for the main process means the whole application goes down. A
+		// pipe whose reader has exited is ordinary, not exceptional.
+		spawned.stdin?.on("error", () => {
+			// Nothing to do: the helper has gone and is about to be replaced.
+		});
 
 		if (spawned.stdout) spawned.stdout.on("data", handleCursorMonitorStdout);
 		if (spawned.stderr) {
@@ -195,6 +197,11 @@ export async function startNativeCursorMonitor() {
 		}
 
 		spawned.once("close", () => {
+			// Before anything else: a pending quiet timer would otherwise fire
+			// into a pipe that has gone, which is how the crash of 24 September
+			// 2026 happened.
+			stopActiveCaretSamplingControl();
+
 			if (nativeCursorMonitorProcess === spawned) {
 				setNativeCursorMonitorProcess(null);
 				setNativeCursorMonitorOutputBuffer("");

@@ -179,8 +179,8 @@ describe("a typing zoom follows the caret when there is a track to follow", () =
 	// The caret starts mid frame and walks down the page, which is what typing
 	// into a growing document looks like before it begins to scroll.
 	const caretTrack = [
-		{ timeMs: 100, cx: 0.5, cy: 0.5 },
-		{ timeMs: 1000, cx: 0.5, cy: 0.8 },
+		{ timeMs: 100, cx: 0.6, cy: 0.5 },
+		{ timeMs: 1000, cx: 0.6, cy: 0.8 },
 	];
 
 	function focusAt(region: ZoomRegion, track = caretTrack) {
@@ -196,10 +196,12 @@ describe("a typing zoom follows the caret when there is a track to follow", () =
 	it("leaves the click anchor behind and goes where the caret went", () => {
 		const focus = focusAt(typingRegion);
 
-		// Dead zone at this depth is a sixth of the frame, so the camera trails
-		// the caret by exactly that rather than centring on it.
+		// The zoom opens on the first caret, so sideways it sits exactly on it
+		// rather than beside the click anchor at 0.3. The caret then walks down
+		// the page, and that later movement trails by the dead zone, a sixth of
+		// the frame at this depth, reached at the bounded pan speed.
+		expect(focus.cx).toBeCloseTo(0.6, 6);
 		expect(focus.cy).toBeCloseTo(0.8 - 1 / 6, 6);
-		expect(focus.cx).toBeCloseTo(0.5, 6);
 	});
 
 	it("still ignores the parked pointer, which is nowhere near the text", () => {

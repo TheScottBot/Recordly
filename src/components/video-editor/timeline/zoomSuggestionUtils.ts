@@ -1,4 +1,4 @@
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import type { CursorTelemetryPoint, ZoomFocus, ZoomTrigger } from "../types";
 import { clusterByTimeGap } from "./timeGapClustering";
 import { buildTypingBurstCandidates, type TypingBurstCandidate } from "./typingBurstUtils";
@@ -445,6 +445,12 @@ export function buildInteractionZoomSuggestions(params: {
 	 * exactly as it did before this feature existed.
 	 */
 	typingEvents?: TypingEvent[];
+	/**
+	 * Read from the same sidecar as the typing events. A burst that has a
+	 * caret takes its focus from it, which is better evidence than the click
+	 * the burst would otherwise be anchored to.
+	 */
+	caretTrack?: readonly CaretSample[];
 	totalMs: number;
 	defaultDurationMs: number;
 	reservedSpans?: Array<{ start: number; end: number }>;
@@ -455,6 +461,7 @@ export function buildInteractionZoomSuggestions(params: {
 	const {
 		cursorTelemetry,
 		typingEvents = [],
+		caretTrack = [],
 		totalMs,
 		reservedSpans = [],
 		mergeGapMs = CLICK_CLUSTER_MERGE_GAP_MS,
@@ -486,7 +493,7 @@ export function buildInteractionZoomSuggestions(params: {
 	// recording with no typing returns exactly the shape it always has.
 	const hasKeystrokes = typingEvents.length > 0;
 	const typingCandidates = hasKeystrokes
-		? buildTypingBurstCandidates(typingEvents, normalizedSamples)
+		? buildTypingBurstCandidates(typingEvents, normalizedSamples, caretTrack)
 		: [];
 	const typingSummary: TypingSuggestionSummary | undefined = hasKeystrokes
 		? {

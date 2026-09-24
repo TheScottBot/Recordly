@@ -54,3 +54,36 @@ export function createRecordingPreferencesStore(filePath: string) {
 		},
 	};
 }
+
+export interface RecordingPreferences {
+	microphoneEnabled: boolean;
+	microphoneDeviceId: string | undefined;
+	systemAudioEnabled: boolean;
+	webcamEnabled: boolean;
+	webcamDeviceId: string | undefined;
+	keyboardCaptureEnabled: boolean;
+}
+
+/**
+ * The shape the launch window is given, declared once so the control it draws
+ * and the gate the capture hook applies cannot drift apart. Keyboard capture
+ * goes through `readKeyboardCaptureEnabled` for exactly that reason: a
+ * control that showed on while capture was off, or the reverse, would be
+ * worse than no control.
+ */
+export function readRecordingPreferences(
+	preferences: Record<string, unknown>,
+): RecordingPreferences {
+	return {
+		microphoneEnabled: preferences.microphoneEnabled === true,
+		microphoneDeviceId:
+			typeof preferences.microphoneDeviceId === "string"
+				? preferences.microphoneDeviceId
+				: undefined,
+		systemAudioEnabled: preferences.systemAudioEnabled === true,
+		webcamEnabled: preferences.webcamEnabled === true,
+		webcamDeviceId:
+			typeof preferences.webcamDeviceId === "string" ? preferences.webcamDeviceId : undefined,
+		keyboardCaptureEnabled: readKeyboardCaptureEnabled(preferences),
+	};
+}

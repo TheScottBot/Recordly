@@ -11,12 +11,21 @@ import { useHudInteraction } from "../contexts/HudInteractionContext";
 export function DropdownItem({
 	onClick,
 	selected,
+	disabled,
+	disabledReason,
 	icon,
 	children,
 	trailing,
 }: {
 	onClick: () => void;
 	selected?: boolean;
+	disabled?: boolean;
+	/**
+	 * Why it cannot be used, shown on hover and read out by a screen reader.
+	 * A disabled control that does not say why is a dead end, and the dimming
+	 * alone carries no meaning to anyone who cannot see it.
+	 */
+	disabledReason?: string;
 	icon: ReactNode;
 	children: ReactNode;
 	trailing?: ReactNode;
@@ -24,8 +33,16 @@ export function DropdownItem({
 	return (
 		<button
 			type="button"
-			className={`${styles.ddItem} ${selected ? styles.ddItemSelected : ""}`}
+			className={[
+				styles.ddItem,
+				selected ? styles.ddItemSelected : "",
+				disabled ? styles.ddItemDisabled : "",
+			]
+				.filter(Boolean)
+				.join(" ")}
 			onClick={onClick}
+			disabled={disabled}
+			title={disabled ? disabledReason : undefined}
 		>
 			<span className="shrink-0">{icon}</span>
 			<span className="truncate">{children}</span>

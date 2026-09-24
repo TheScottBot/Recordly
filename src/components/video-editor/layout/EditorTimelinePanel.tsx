@@ -1,4 +1,4 @@
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import type { RefObject } from "react";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import { retimeCaptionFragment } from "../captionTimeline";
@@ -28,6 +28,7 @@ type Props = {
 	cursorTelemetrySourcePath: string | null;
 	normalizedCursorTelemetry: ReturnType<typeof useTimelineState>["cursorTelemetry"];
 	typingEvents: TypingEvent[];
+	caretTrack: readonly CaretSample[];
 	autoSuggestZoomsTrigger: number;
 	handleAutoSuggestZoomsConsumed: () => void;
 	disableSuggestedZooms: boolean;
@@ -52,6 +53,7 @@ export function EditorTimelinePanel(props: Props) {
 		cursorTelemetrySourcePath,
 		normalizedCursorTelemetry,
 		typingEvents,
+		caretTrack,
 		autoSuggestZoomsTrigger,
 		handleAutoSuggestZoomsConsumed,
 		disableSuggestedZooms,
@@ -72,6 +74,7 @@ export function EditorTimelinePanel(props: Props) {
 				cursorTelemetrySourcePath={cursorTelemetrySourcePath}
 				cursorTelemetry={normalizedCursorTelemetry}
 				typingEvents={typingEvents}
+				caretTrack={caretTrack}
 				autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 				onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 				disableSuggestedZooms={disableSuggestedZooms}

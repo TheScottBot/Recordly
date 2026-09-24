@@ -2,6 +2,7 @@ import {
 	EyeIcon,
 	EyeSlashIcon,
 	FolderOpenIcon,
+	KeyboardIcon,
 	TranslateIcon,
 	VideoCameraIcon,
 	ArrowClockwiseIcon,
@@ -38,6 +39,10 @@ export function MorePopover({
 	supportsHudCaptureProtection,
 	hideHudFromCapture,
 	onToggleHudCaptureProtection,
+	supportsKeyboardCapture,
+	keyboardCaptureEnabled,
+	keyboardCaptureLocked,
+	onToggleKeyboardCapture,
 	onChooseRecordingsDirectory,
 	onOpenVideoFile,
 	onOpenProjectBrowser,
@@ -49,6 +54,17 @@ export function MorePopover({
 	supportsHudCaptureProtection: boolean;
 	hideHudFromCapture: boolean;
 	onToggleHudCaptureProtection: () => void;
+	/** False on macOS, where no keyboard capture exists to offer. */
+	supportsKeyboardCapture: boolean;
+	keyboardCaptureEnabled: boolean;
+	/**
+	 * True while a recording is in progress. The preference is read once when
+	 * recording starts, so changing it part way through would change nothing,
+	 * and a privacy control that appears to work but does not is worse than
+	 * one that says it cannot be used yet.
+	 */
+	keyboardCaptureLocked: boolean;
+	onToggleKeyboardCapture: () => void;
 	onChooseRecordingsDirectory: () => void;
 	onOpenVideoFile: () => void;
 	onOpenProjectBrowser: () => void;
@@ -84,6 +100,26 @@ export function MorePopover({
 					{hideHudFromCapture
 						? t("recording.hideHudFromVideo")
 						: t("recording.showHudInVideo")}
+				</DropdownItem>
+			)}
+			{/*
+			 * One icon in both states, because Phosphor has no struck through
+			 * keyboard and the same icon at a different weight would signal by
+			 * appearance alone. The label says which way the toggle goes and
+			 * the selected state marks where it currently is, so the meaning
+			 * survives without colour or shape.
+			 */}
+			{supportsKeyboardCapture && (
+				<DropdownItem
+					icon={<KeyboardIcon size={16} />}
+					selected={keyboardCaptureEnabled}
+					disabled={keyboardCaptureLocked}
+					disabledReason={t("recording.keyboardCaptureLocked")}
+					onClick={onToggleKeyboardCapture}
+				>
+					{keyboardCaptureEnabled
+						? t("recording.disableKeyboardCapture")
+						: t("recording.enableKeyboardCapture")}
 				</DropdownItem>
 			)}
 			<DropdownItem

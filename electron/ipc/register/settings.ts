@@ -4,7 +4,10 @@ import { hasAppSetting, readAppSettingsStore, writeAppSettingsStore } from "../.
 import { hideCursor } from "../../cursorHider";
 import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from "../../windows";
 import { COUNTDOWN_SETTINGS_FILE, SHORTCUTS_FILE } from "../constants";
-import type { RecordingPreferencesPatch } from "../settings/recordingPreferencesStore";
+import {
+	type RecordingPreferencesPatch,
+	readRecordingPreferences,
+} from "../settings/recordingPreferencesStore";
 import { sharedRecordingPreferencesStore } from "../settings/sharedRecordingPreferencesStore";
 import {
 	countdownCancelled,
@@ -120,28 +123,14 @@ export function registerSettingsHandlers() {
 	// ---------------------------------------------------------------------------
 	ipcMain.handle("get-recording-preferences", async () => {
 		try {
-			const parsed = await recordingPreferencesStore.read();
 			return {
 				success: true,
-				microphoneEnabled: parsed.microphoneEnabled === true,
-				microphoneDeviceId:
-					typeof parsed.microphoneDeviceId === "string"
-						? parsed.microphoneDeviceId
-						: undefined,
-				systemAudioEnabled: parsed.systemAudioEnabled === true,
-				webcamEnabled: parsed.webcamEnabled === true,
-				webcamDeviceId:
-					typeof parsed.webcamDeviceId === "string" ? parsed.webcamDeviceId : undefined,
+				...readRecordingPreferences(await recordingPreferencesStore.read()),
 			};
 		} catch {
-			return {
-				success: true,
-				microphoneEnabled: false,
-				microphoneDeviceId: undefined,
-				systemAudioEnabled: false,
-				webcamEnabled: false,
-				webcamDeviceId: undefined,
-			};
+			// An unreadable file is read as an empty one, which is everything
+			// off. Keyboard capture in particular must never fail on.
+			return { success: true, ...readRecordingPreferences({}) };
 		}
 	});
 

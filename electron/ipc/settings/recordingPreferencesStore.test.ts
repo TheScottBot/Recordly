@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	createRecordingPreferencesStore,
 	readKeyboardCaptureEnabled,
+	readRecordingPreferences,
 } from "./recordingPreferencesStore";
 
 vi.mock("electron", () => ({
@@ -71,5 +72,67 @@ describe("keyboard capture preference", () => {
 
 		await store.update({ keyboardCaptureEnabled: false });
 		expect(readKeyboardCaptureEnabled(await store.read())).toBe(false);
+	});
+});
+
+describe("readRecordingPreferences", () => {
+	it("reads every preference the launch window shows", () => {
+		expect(
+			readRecordingPreferences({
+				microphoneEnabled: true,
+				microphoneDeviceId: "mic-2",
+				systemAudioEnabled: true,
+				webcamEnabled: true,
+				webcamDeviceId: "cam-1",
+				keyboardCaptureEnabled: true,
+			}),
+		).toEqual({
+			microphoneEnabled: true,
+			microphoneDeviceId: "mic-2",
+			systemAudioEnabled: true,
+			webcamEnabled: true,
+			webcamDeviceId: "cam-1",
+			keyboardCaptureEnabled: true,
+		});
+	});
+
+	it("reports everything off for an empty file, which is what a new install has", () => {
+		expect(readRecordingPreferences({})).toEqual({
+			microphoneEnabled: false,
+			microphoneDeviceId: undefined,
+			systemAudioEnabled: false,
+			webcamEnabled: false,
+			webcamDeviceId: undefined,
+			keyboardCaptureEnabled: false,
+		});
+	});
+
+	/**
+	 * The control must show off unless the stored value is exactly true, for
+	 * the same reason the capture hook gates on exactly true: a file that has
+	 * been hand edited or half written must never read as consent.
+	 */
+	it("shows keyboard capture off for anything that is not exactly true", () => {
+		for (const stored of ["true", 1, "yes", {}, [], null, undefined, 0, false]) {
+			expect(
+				readRecordingPreferences({ keyboardCaptureEnabled: stored }).keyboardCaptureEnabled,
+			).toBe(false);
+		}
+	});
+
+	it("agrees with the gate the capture hook uses, so the control cannot lie", () => {
+		for (const stored of [true, "true", 1, null, undefined, false]) {
+			const preferences = { keyboardCaptureEnabled: stored };
+
+			expect(readRecordingPreferences(preferences).keyboardCaptureEnabled).toBe(
+				readKeyboardCaptureEnabled(preferences),
+			);
+		}
+	});
+
+	it("ignores a device identifier that is not a string", () => {
+		expect(readRecordingPreferences({ microphoneDeviceId: 42 }).microphoneDeviceId).toBe(
+			undefined,
+		);
 	});
 });

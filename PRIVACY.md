@@ -115,10 +115,25 @@ application), and keyboard capture is not yet available there.
 
 ### Where the setting lives
 
-At this stage of the work there is no on screen control yet; one is being
-added. The value is `keyboardCaptureEnabled` in `recordings-settings.json`
+In the launch window, under the More menu, as "Enable typing detection" or
+"Disable typing detection". It is called typing detection rather than
+keyboard capture because that is what it does: it notices that typing is
+happening so the editor can zoom onto the field, and it never records which
+key was pressed.
+
+It cannot be changed while a recording is in progress. The preference is
+read once, when recording starts, so a change part way through would not
+affect the recording being made, and a privacy control that looks like it
+worked but did not would be worse than one that says it cannot be used yet.
+Stop the recording to change it.
+
+The stored value is `keyboardCaptureEnabled` in `recordings-settings.json`
 in Recordly's user data folder, and only the exact value `true` turns
-capture on. Anything else, including the key being absent, means off.
+capture on. Anything else, including the key being absent, means off. The
+control reads it through the same check the capture hook uses, so what the
+menu shows and what actually happens cannot disagree; a test asserts that.
+
+The control is not shown on macOS, where keyboard capture does not exist.
 
 ## Retention
 

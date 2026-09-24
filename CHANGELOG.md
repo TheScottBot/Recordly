@@ -60,6 +60,41 @@ were cleared at which commit.
   when the pointer is parked wherever it was left. A typing region now
   follows the caret instead, in the preview and in every export path, and
   holds the focus it anchored to where there is no caret track to follow.
+- The application no longer crashes with an uncaught EPIPE when a recording
+  ends. Caret sampling writes commands to the helper's standard input, and a
+  write to a pipe whose reader has exited fails asynchronously: it does not
+  throw, so a try/catch around the call never sees it, and the stream emits
+  an error that becomes an uncaught exception in the main process. Writes now
+  go through one guarded helper, the stream has an error listener, and a
+  pending quiet timer is cancelled when the helper closes rather than firing
+  into a pipe that has gone.
+- A burst of typing takes its focus from the caret where there is one, and no
+  longer needs a click before it at all. The rule that a burst without a
+  preceding click has no trustworthy focus was written when a click was the
+  only evidence available; a caret track is better evidence, because a click
+  is a guess that someone clicked into the field they then typed in. On the
+  author's recording this recovered a burst that had been refused a zoom
+  outright, and moved every other typing zoom off a click at the very bottom
+  edge of the screen and onto the text. A recording with no track behaves
+  exactly as it did.
+- A typing zoom opens already pointed at the text. It used to open on the
+  click that anchored the typing and then move to where the caret actually
+  was, which read as the zoom going to the middle and then centring on the
+  typing. A zoom now aims at the first caret of its region from the moment it
+  opens, the way a click zoom is already aimed at a click that has not
+  happened yet. On the author's recording all three typing zooms now open
+  exactly where they settle, against a slide of about a quarter of the frame
+  before.
+- A typing zoom no longer lurches once it is under way, and no longer crawls
+  either. The camera used to relocate onto a caret sample in a single frame,
+  measured at 0.249 of the frame in one frame of preview. A fixed speed limit
+  fixed that and introduced the opposite fault: selecting a page of text and
+  typing over it does not move the caret from the bottom to the top, it stops
+  being at the bottom, and a camera that crawled across missed what was being
+  typed. The camera's speed now rises with how far it has to go, so it covers
+  any gap in about a quarter of a second: a small correction is gentle in
+  absolute terms and a long relocation is quick, with a floor so the last
+  sliver closes and a ceiling so nothing becomes a teleport.
 - A typing zoom no longer begins before the typing does. Typing regions
   padded half a second ahead of the first key press, copied from click
   behaviour where it belongs: a click zoom settles before the click lands,
@@ -86,6 +121,13 @@ were cleared at which commit.
 - A typing zoom can be dragged to a different focus, since its position is
   inferred from the click before the typing rather than known. Dragging one
   marks it as chosen by hand, so nothing moves it afterwards.
+- Typing detection can be turned on and off from the launch window, under
+  the More menu, in all eleven locales. It is called typing detection rather
+  than keyboard capture because that is what it does. The control cannot be
+  changed while a recording is in progress, since the preference is read once
+  when recording starts, and it is not shown on macOS where no keyboard
+  capture exists. It reads the stored value through the same check the
+  capture hook applies, so the menu and the behaviour cannot disagree.
 - Caret tracking on Windows, behind the same keyboard capture setting. While
   someone is typing, `cursor-monitor.exe` samples the caret about four times
   a second on its own thread and reports it when it moves; the main process
@@ -103,6 +145,11 @@ were cleared at which commit.
 
 ### Author gates cleared
 
+- A typing zoom begins where the text is, moves as the text moves, and keeps
+  up when the text is replaced. Checked on 24 September 2026 across typing
+  that scrolls a page, selecting a page and typing over it, and swapping
+  between tabs while typing. Five bursts in that recording, five zooms, none
+  declined.
 - A typing zoom follows text that scrolls. Checked on 24 September 2026
   against a recording of typing past the bottom of a window: the camera held
   while the caret walked down inside the dead zone, panned as it raced to the

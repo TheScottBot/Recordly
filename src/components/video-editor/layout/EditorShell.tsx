@@ -238,6 +238,7 @@ export function EditorShell(props: Props) {
 					cursorTelemetrySourcePath={timeline.cursorTelemetrySourcePath}
 					normalizedCursorTelemetry={cursor.normalizedCursorTelemetry}
 					typingEvents={cursor.typingEvents}
+					caretTrack={cursor.caretTrack}
 					autoSuggestZoomsTrigger={ui.autoSuggestZoomsTrigger}
 					handleAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 					disableSuggestedZooms={!appearance.autoApplyFreshRecordingAutoZooms}

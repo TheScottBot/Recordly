@@ -1,4 +1,4 @@
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import { Plus } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +40,7 @@ export interface TimelineEditorProps {
 	onSeek?: (time: number) => void;
 	cursorTelemetry?: CursorTelemetryPoint[];
 	typingEvents?: TypingEvent[];
+	caretTrack?: readonly CaretSample[];
 	autoSuggestZoomsTrigger?: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	disableSuggestedZooms?: boolean;
@@ -124,6 +125,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onSeek,
 			cursorTelemetry = [],
 			typingEvents = [],
+			caretTrack = [],
 			autoSuggestZoomsTrigger = 0,
 			onAutoSuggestZoomsConsumed,
 			disableSuggestedZooms = false,
@@ -364,6 +366,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			safeMinDurationMs,
 			cursorTelemetry,
 			typingEvents,
+			caretTrack,
 			autoSuggestZoomsTrigger,
 			onAutoSuggestZoomsConsumed,
 			disableSuggestedZooms,

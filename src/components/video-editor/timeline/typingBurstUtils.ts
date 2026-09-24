@@ -10,7 +10,7 @@
  * nothing for it: a missing zoom is neutral, a wrong one is a defect.
  */
 
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import type { CursorTelemetryPoint, ZoomFocus } from "../types";
 import { clusterByTimeGap } from "./timeGapClustering";
 import { CLICK_CLUSTER_MERGE_GAP_MS, CLICK_CLUSTER_PAD_MS } from "./zoomSuggestionConstants";
@@ -41,6 +41,7 @@ export interface TypingBurst {
 }
 
 export type TypingFocusRule =
+	| "taken-from-the-caret"
 	| "anchored-to-preceding-click"
 	| "inherited-from-typing-session"
 	| "no-trustworthy-focus";
@@ -118,16 +119,53 @@ export function deriveTypingBurstFocus(
  * the caller can count declines as well as suggestions rather than losing
  * them silently.
  */
+/**
+ * The caret the burst began at, if the recording carries a track that covers
+ * it. Better evidence than anything else available: a click is a guess that
+ * the person clicked into the field they then typed in, whereas the caret is
+ * where the typing actually was.
+ */
+function findCaretForBurst(
+	burst: TypingBurst,
+	caretTrack: readonly CaretSample[],
+): CaretSample | null {
+	for (const sample of caretTrack) {
+		if (sample.timeMs >= burst.firstKeystrokeMs && sample.timeMs <= burst.lastKeystrokeMs) {
+			return sample;
+		}
+	}
+
+	return null;
+}
+
 export function buildTypingBurstCandidates(
 	typingEvents: readonly TypingEvent[],
 	samples: readonly CursorTelemetryPoint[],
+	/**
+	 * Absent for every recording made before caret sampling existed, and on
+	 * every platform that does not sample one, in which case the click rules
+	 * below decide on their own exactly as they did.
+	 */
+	caretTrack: readonly CaretSample[] = [],
 ): TypingBurstCandidate[] {
 	const candidates: TypingBurstCandidate[] = [];
 	let previousBurst: TypingBurst | null = null;
 	let previousFocus: TypingBurstFocus | null = null;
 
 	for (const burst of detectTypingBursts(typingEvents)) {
-		let derivedFocus = deriveTypingBurstFocus(burst, samples);
+		const caret = findCaretForBurst(burst, caretTrack);
+		// The caret wins outright where there is one. The rule that a burst
+		// without a preceding click has no trustworthy focus was written when a
+		// click was the only evidence there was; a burst with a caret needs no
+		// click, and the author lost a zoom to that on 24 September 2026 after
+		// selecting a page of text and typing over it.
+		let derivedFocus: TypingBurstFocus = caret
+			? {
+					focus: { cx: caret.cx, cy: caret.cy },
+					rule: "taken-from-the-caret",
+					anchorClickTimeMs: null,
+				}
+			: deriveTypingBurstFocus(burst, samples);
 
 		const burstBefore = previousBurst;
 		if (derivedFocus.focus === null && burstBefore !== null && previousFocus?.focus) {

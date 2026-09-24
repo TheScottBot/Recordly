@@ -147,6 +147,9 @@ type UseScreenRecorderReturn = {
 	setWebcamEnabled: (enabled: boolean) => void;
 	webcamDeviceId: string | undefined;
 	setWebcamDeviceId: (deviceId: string | undefined) => void;
+	/** Off unless the stored preference is exactly true. See PRIVACY.md. */
+	keyboardCaptureEnabled: boolean;
+	setKeyboardCaptureEnabled: (enabled: boolean) => void;
 	countdownDelay: number;
 	setCountdownDelay: (delay: number) => void;
 };
@@ -384,6 +387,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 	const [webcamEnabled, setWebcamEnabled] = useState(false);
+	// Off until the stored preference says otherwise, which is the same
+	// default the capture hook applies: absent means no keyboard capture.
+	const [keyboardCaptureEnabled, setKeyboardCaptureEnabled] = useState(false);
 	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
 	const [countdownDelay, setCountdownDelayState] = useState(3);
 	const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -1537,6 +1543,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (result.webcamDeviceId) {
 					setWebcamDeviceId(result.webcamDeviceId);
 				}
+				setKeyboardCaptureEnabled(result.keyboardCaptureEnabled);
 			}
 		})();
 	}, []);
@@ -1564,6 +1571,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const persistWebcamDeviceId = useCallback((deviceId: string | undefined) => {
 		setWebcamDeviceId(deviceId);
 		void window.electronAPI.setRecordingPreferences({ webcamDeviceId: deviceId });
+	}, []);
+
+	const persistKeyboardCaptureEnabled = useCallback((enabled: boolean) => {
+		setKeyboardCaptureEnabled(enabled);
+		void window.electronAPI.setRecordingPreferences({ keyboardCaptureEnabled: enabled });
 	}, []);
 
 	useEffect(() => {
@@ -2444,6 +2456,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamEnabled: persistWebcamEnabled,
 		webcamDeviceId,
 		setWebcamDeviceId: persistWebcamDeviceId,
+		keyboardCaptureEnabled,
+		setKeyboardCaptureEnabled: persistKeyboardCaptureEnabled,
 		countdownDelay,
 		setCountdownDelay,
 	};

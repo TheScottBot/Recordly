@@ -311,3 +311,13 @@
 	background-color: #1a1a22;
 	color: #eeeef2;
 }
+
+.ddItemDisabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.ddItemDisabled:hover {
+	background: transparent;
+	color: var(--launch-text-muted);
+}
