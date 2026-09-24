@@ -25,7 +25,14 @@ vi.mock("../utils", () => ({
 	})),
 }));
 
-import { activeTypingEvents, setActiveTypingEvents, setPendingTypingEvents } from "../state";
+import {
+	activeTypingEvents,
+	setActiveCaretSamples,
+	setActiveTypingEvents,
+	setPendingCaretSamples,
+	setPendingTypingEvents,
+} from "../state";
+import { pushCaretSample } from "./caretTelemetry";
 import {
 	parseTypingTelemetrySidecar,
 	persistPendingTypingTelemetry,
@@ -63,7 +70,7 @@ describe("typing telemetry store", () => {
 		expect(activeTypingEvents[0].timeMs).toBe(0);
 	});
 
-	it("writes the sidecar beside the recording, at version 1", async () => {
+	it("writes the sidecar beside the recording at the current version", async () => {
 		const events = [
 			{ timeMs: 100, keyProducesCharacter: true },
 			{ timeMs: 250, keyProducesCharacter: false },
@@ -95,6 +102,8 @@ describe("typing telemetry store", () => {
 			status: "ok",
 			version: 1,
 			events: [{ timeMs: 900, keyProducesCharacter: true }],
+			// Version 1 predates the caret track, so it always reads as empty.
+			caretSamples: [],
 		});
 	});
 
@@ -145,6 +154,110 @@ describe("typing telemetry store", () => {
 	it("does not write anything when the recording held no typing", async () => {
 		snapshotTypingTelemetryForPersistence();
 		await persistPendingTypingTelemetry("/tmp/recording.mp4");
+
+		expect(writeFile).not.toHaveBeenCalled();
+	});
+});
+
+describe("the caret track in the sidecar", () => {
+	it("reads a version 2 track", () => {
+		const result = parseTypingTelemetrySidecar({
+			version: 2,
+			events: [{ timeMs: 10, keyProducesCharacter: true }],
+			caretSamples: [
+				{ timeMs: 20, cx: 0.4, cy: 0.5 },
+				{ timeMs: 10, cx: 0.3, cy: 0.5 },
+			],
+		});
+
+		expect(result.status).toBe("ok");
+		expect(result.caretSamples).toEqual([
+			{ timeMs: 10, cx: 0.3, cy: 0.5 },
+			{ timeMs: 20, cx: 0.4, cy: 0.5 },
+		]);
+	});
+
+	it("gives a version 1 file an empty track, because it could not have had one", () => {
+		const result = parseTypingTelemetrySidecar({
+			version: 1,
+			events: [{ timeMs: 10, keyProducesCharacter: true }],
+		});
+
+		expect(result.status).toBe("ok");
+		expect(result.caretSamples).toEqual([]);
+	});
+
+	/**
+	 * A caret track that cannot be read is a lost camera path, which is a
+	 * degraded zoom. Throwing the typing events away with it would be a
+	 * missing zoom, which is worse.
+	 */
+	it("drops an unreadable track without rejecting the typing events with it", () => {
+		const result = parseTypingTelemetrySidecar({
+			version: 2,
+			events: [{ timeMs: 10, keyProducesCharacter: true }],
+			caretSamples: "not an array",
+		});
+
+		expect(result.status).toBe("ok");
+		expect(result.events).toHaveLength(1);
+		expect(result.caretSamples).toEqual([]);
+	});
+
+	it("writes the track beside the events", async () => {
+		writeFile.mockClear();
+		await writeTypingTelemetry(
+			"/tmp/recording.webm",
+			[{ timeMs: 10, keyProducesCharacter: true }],
+			[{ timeMs: 12, cx: 0.5, cy: 0.5 }],
+		);
+
+		const written = JSON.parse(writeFile.mock.calls[0][1] as string);
+		expect(written.version).toBe(2);
+		expect(written.caretSamples).toEqual([{ timeMs: 12, cx: 0.5, cy: 0.5 }]);
+	});
+
+	it("leaves the key out entirely when nothing was sampled", async () => {
+		writeFile.mockClear();
+		await writeTypingTelemetry("/tmp/recording.webm", [{ timeMs: 10 }], []);
+
+		const written = JSON.parse(writeFile.mock.calls[0][1] as string);
+		expect(written).not.toHaveProperty("caretSamples");
+	});
+});
+
+describe("carrying the caret track to disk", () => {
+	beforeEach(() => {
+		writeFile.mockReset();
+		rm.mockReset();
+		setActiveTypingEvents([]);
+		setPendingTypingEvents([]);
+		setActiveCaretSamples([]);
+		setPendingCaretSamples([]);
+	});
+
+	it("survives the snapshot the recording stop performs, as the events do", async () => {
+		pushTypingEvent(100, true);
+		pushCaretSample({ timeMs: 120, cx: 0.4, cy: 0.4 });
+		pushCaretSample({ timeMs: 360, cx: 0.45, cy: 0.4 });
+
+		snapshotTypingTelemetryForPersistence();
+		setActiveTypingEvents([]);
+		setActiveCaretSamples([]);
+		await persistPendingTypingTelemetry("/tmp/recording.webm");
+
+		const written = JSON.parse(writeFile.mock.calls[0][1] as string);
+		expect(written.caretSamples).toEqual([
+			{ timeMs: 120, cx: 0.4, cy: 0.4 },
+			{ timeMs: 360, cx: 0.45, cy: 0.4 },
+		]);
+	});
+
+	it("does not write a track for a recording that had no typing in it", async () => {
+		pushCaretSample({ timeMs: 120, cx: 0.4, cy: 0.4 });
+
+		snapshotTypingTelemetryForPersistence();
+		await persistPendingTypingTelemetry("/tmp/recording.webm");
 
 		expect(writeFile).not.toHaveBeenCalled();
 	});

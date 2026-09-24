@@ -5,6 +5,7 @@ import { BrowserWindow } from "electron";
 import { ensureNativeCursorMonitorBinary, getCursorMonitorExePath } from "../paths/binaries";
 import {
 	currentCursorVisualType,
+	isCursorCaptureActive,
 	nativeCursorMonitorOutputBuffer,
 	nativeCursorMonitorProcess,
 	setCurrentCursorVisualType,
@@ -12,7 +13,15 @@ import {
 	setNativeCursorMonitorProcess,
 } from "../state";
 import type { CursorVisualType } from "../types";
+import {
+	createCaretSamplingControl,
+	setActiveCaretSamplingControl,
+	stopActiveCaretSamplingControl,
+} from "./caretSamplingControl";
+import { normalizeCaretScreenPoint, pushCaretSample } from "./caretTelemetry";
+import { parseCursorMonitorLine } from "./cursorMonitorProtocol";
 import { recordCursorMouseDown, recordCursorMouseUp } from "./interaction";
+import { getCursorCaptureElapsedMs, isCursorCapturePaused } from "./telemetry";
 
 export function emitCursorStateChanged(cursorType: CursorVisualType) {
 	BrowserWindow.getAllWindows().forEach((window) => {
@@ -28,42 +37,64 @@ export function handleCursorMonitorStdout(chunk: Buffer) {
 	setNativeCursorMonitorOutputBuffer(lines.pop() ?? "");
 
 	for (const line of lines) {
-		const interactionMatch = line.match(/^INTERACTION:(mousedown|mouseup)(?::([123]))?$/);
-		if (interactionMatch) {
-			if (interactionMatch[1] === "mouseup") {
-				recordCursorMouseUp();
-			} else {
-				const button = Number(interactionMatch[2]);
-				recordCursorMouseDown(button === 2 || button === 3 ? button : 1);
-			}
+		const message = parseCursorMonitorLine(line);
+		if (!message) {
 			continue;
 		}
 
-		const match = line.match(/^STATE:(.+)$/);
-		if (!match) continue;
-		const next = match[1].trim() as CursorVisualType;
-		if (
-			next === "arrow" ||
-			next === "text" ||
-			next === "pointer" ||
-			next === "crosshair" ||
-			next === "open-hand" ||
-			next === "closed-hand" ||
-			next === "resize-ew" ||
-			next === "resize-ns" ||
-			next === "not-allowed"
-		) {
-			if (currentCursorVisualType !== next) {
-				setCurrentCursorVisualType(next);
-				// sampleCursorStateChange is called from cursor/telemetry.ts via the handler
-				emitCursorStateChanged(next);
-			}
+		switch (message.kind) {
+			case "mouse-down":
+				recordCursorMouseDown(message.button);
+				break;
+			case "mouse-up":
+				recordCursorMouseUp();
+				break;
+			case "caret":
+				recordCaretPosition(message.xPhysicalPixels, message.yPhysicalPixels);
+				break;
+			case "caret-lost":
+				// Deliberately nothing. A gap in the track is how the camera is
+				// told to hold the last caret it trusted, rather than jumping
+				// back to the click the typing was anchored to.
+				break;
+			case "cursor-state":
+				if (currentCursorVisualType !== message.cursorType) {
+					setCurrentCursorVisualType(message.cursorType);
+					// sampleCursorStateChange is called from cursor/telemetry.ts via the handler
+					emitCursorStateChanged(message.cursorType);
+				}
+				break;
 		}
 	}
 }
 
+/**
+ * Turns a caret position from the helper into a sample on the recording's own
+ * clock. Refused positions, which are carets outside the captured area, leave
+ * a gap on purpose; see the `caret-lost` case above.
+ */
+function recordCaretPosition(xPhysicalPixels: number, yPhysicalPixels: number) {
+	if (!isCursorCaptureActive || isCursorCapturePaused()) {
+		return;
+	}
+
+	const point = normalizeCaretScreenPoint({ x: xPhysicalPixels, y: yPhysicalPixels });
+	if (!point) {
+		return;
+	}
+
+	pushCaretSample({
+		timeMs: getCursorCaptureElapsedMs(),
+		cx: point.cx,
+		cy: point.cy,
+	});
+}
+
 export function stopNativeCursorMonitor() {
 	setCurrentCursorVisualType("arrow");
+
+	// Before the process goes, so the quiet timer cannot fire into a closed pipe.
+	stopActiveCaretSamplingControl();
 
 	if (!nativeCursorMonitorProcess) {
 		return;
@@ -139,6 +170,22 @@ export async function startNativeCursorMonitor() {
 				setCurrentCursorVisualType("arrow");
 			}
 		});
+
+		// Caret sampling is Windows only: it is the only platform whose helper
+		// knows the command, and the only one the sampler was written for.
+		if (process.platform === "win32") {
+			setActiveCaretSamplingControl(
+				createCaretSamplingControl({
+					send: (command) => {
+						try {
+							spawned.stdin?.write(`${command}\n`);
+						} catch {
+							// A helper that has gone needs no telling to stop.
+						}
+					},
+				}),
+			);
+		}
 
 		if (spawned.stdout) spawned.stdout.on("data", handleCursorMonitorStdout);
 		if (spawned.stderr) {

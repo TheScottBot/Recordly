@@ -110,7 +110,9 @@ import {
 	nativeScreenRecordingActive,
 	selectedSource,
 	setActiveCursorSamples,
+	setActiveCaretSamples,
 	setActiveTypingEvents,
+	setPendingCaretSamples,
 	setPendingTypingEvents,
 	setCachedSystemCursorAssets,
 	setCachedSystemCursorAssetsSourceMtimeMs,
@@ -1893,6 +1895,8 @@ export function registerRecordingHandlers(
 			setPendingCursorSamples([]);
 			setActiveTypingEvents([]);
 			setPendingTypingEvents([]);
+			setActiveCaretSamples([]);
+			setPendingCaretSamples([]);
 			setCursorCaptureStartTimeMs(Date.now());
 			resetCursorCaptureClock();
 			setLinuxCursorScreenPoint(null);
@@ -1913,6 +1917,7 @@ export function registerRecordingHandlers(
 			snapshotTypingTelemetryForPersistence();
 			setActiveCursorSamples([]);
 			setActiveTypingEvents([]);
+			setActiveCaretSamples([]);
 		}
 
 		const source = selectedSource || { name: "Screen" };

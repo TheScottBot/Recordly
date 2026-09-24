@@ -204,17 +204,20 @@ export function getCursorCaptureElapsedMs(nowMs = Date.now()) {
 	);
 }
 
-export function getNormalizedCursorPoint() {
-	const fallbackCursor = getScreen().getCursorScreenPoint();
-	const linuxCursorCache = process.platform === "linux" ? linuxCursorScreenPoint : null;
-	const isLinuxCacheFresh = !!linuxCursorCache && Date.now() - linuxCursorCache.updatedAt <= 1000;
-
+/**
+ * Where a device independent screen point falls in the captured area, as
+ * fractions that are deliberately NOT clamped.
+ *
+ * The two callers want different things at the edge. The pointer clamps,
+ * because a pointer a little off the frame is still the pointer. A caret
+ * refuses, because a caret off the frame is someone typing in another window,
+ * and pinning the camera to an edge for as long as that lasts reads as a
+ * stuck zoom. They share this so a caret and a click at the same place on
+ * screen can never disagree about where that is in the frame.
+ */
+export function locateDipPointInCapturedArea(point: { x: number; y: number }) {
 	const primarySf =
 		process.platform !== "darwin" ? getScreen().getPrimaryDisplay().scaleFactor || 1 : 1;
-
-	const cursor = isLinuxCacheFresh
-		? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
-		: fallbackCursor;
 
 	const windowBounds = selectedSource?.id?.startsWith("window:") ? selectedWindowBounds : null;
 	if (windowBounds) {
@@ -229,8 +232,8 @@ export function getNormalizedCursorPoint() {
 		const height = Math.max(1, windowBounds.height / sf);
 
 		return {
-			cx: clamp((cursor.x - windowBounds.x / sf) / width, 0, 1),
-			cy: clamp((cursor.y - windowBounds.y / sf) / height, 0, 1),
+			cx: (point.x - windowBounds.x / sf) / width,
+			cy: (point.y - windowBounds.y / sf) / height,
 		};
 	}
 
@@ -240,14 +243,28 @@ export function getNormalizedCursorPoint() {
 				.getAllDisplays()
 				.find((display) => display.id === sourceDisplayId) ?? null)
 		: null;
-	const display = sourceDisplay ?? getScreen().getDisplayNearestPoint(cursor);
+	const display = sourceDisplay ?? getScreen().getDisplayNearestPoint(point);
 	const bounds = display.bounds;
 	const width = Math.max(1, bounds.width);
 	const height = Math.max(1, bounds.height);
 
-	const cx = clamp((cursor.x - bounds.x) / width, 0, 1);
-	const cy = clamp((cursor.y - bounds.y) / height, 0, 1);
-	return { cx, cy };
+	return { cx: (point.x - bounds.x) / width, cy: (point.y - bounds.y) / height };
+}
+
+export function getNormalizedCursorPoint() {
+	const fallbackCursor = getScreen().getCursorScreenPoint();
+	const linuxCursorCache = process.platform === "linux" ? linuxCursorScreenPoint : null;
+	const isLinuxCacheFresh = !!linuxCursorCache && Date.now() - linuxCursorCache.updatedAt <= 1000;
+
+	const primarySf =
+		process.platform !== "darwin" ? getScreen().getPrimaryDisplay().scaleFactor || 1 : 1;
+
+	const cursor = isLinuxCacheFresh
+		? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
+		: fallbackCursor;
+
+	const located = locateDipPointInCapturedArea(cursor);
+	return { cx: clamp(located.cx, 0, 1), cy: clamp(located.cy, 0, 1) };
 }
 
 export function getHookCursorScreenPoint(

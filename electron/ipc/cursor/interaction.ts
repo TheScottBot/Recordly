@@ -19,6 +19,7 @@ import type {
 	UiohookModuleNamespace,
 } from "../types";
 import { buildCharacterProducingKeycodeSet } from "./keyboardCapture";
+import { noteTypingForCaretSampling } from "./caretSamplingControl";
 import { pushTypingEvent } from "./typingTelemetry";
 import {
 	getCursorCaptureElapsedMs,
@@ -246,6 +247,12 @@ export function recordTypingEvent(keyProducesCharacter: boolean) {
 	}
 
 	pushTypingEvent(getCursorCaptureElapsedMs(), keyProducesCharacter);
+
+	// The helper cannot tell that anyone is typing, so it is told here. Every
+	// key counts, including the modifiers and arrows that produce no
+	// character: moving the caret with an arrow key is still the caret
+	// moving, and the camera should follow it.
+	noteTypingForCaretSampling();
 }
 
 export interface StartInteractionCaptureOptions {
