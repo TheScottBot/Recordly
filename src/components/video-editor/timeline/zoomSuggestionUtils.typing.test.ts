@@ -218,7 +218,10 @@ describe("typing bursts as their own suggestions", () => {
 		expect(result.suggestions).toEqual([
 			CLICK_REGION,
 			{ start: 5_500, end: 6_400, focus: CLICK_FOCUS, trigger: "typing" },
-			{ start: 11_500, end: 12_900, focus: CLICK_FOCUS, trigger: "typing" },
+			// Both begin on their first keystroke. The second read 11_500 while
+			// typing regions padded ahead of the burst, which the author saw as
+			// the camera moving before the typing did.
+			{ start: 12_000, end: 12_900, focus: CLICK_FOCUS, trigger: "typing" },
 		]);
 		expect(result.typing).toMatchObject({
 			burstsDetected: 2,
@@ -312,5 +315,47 @@ describe("typing bursts as their own suggestions", () => {
 			burstsDeclinedForFocus: 0,
 			burstsLimitedByClick: 0,
 		});
+	});
+});
+
+describe("where a typing region begins", () => {
+	/**
+	 * A click zoom pads ahead of the click because the camera should be settled
+	 * at the instant the click lands, and a pointer travelling to a target makes
+	 * that early move read as intent. Typing has no such approach: nothing on
+	 * screen moves before the first keystroke, so a camera that has already
+	 * zoomed reads as a fault. The author saw exactly that on 23 September 2026
+	 * and described it as moving in advance of the typing.
+	 */
+	it("begins at the first keystroke rather than a pad ahead of it", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves([makeClick(8_000, 0.4, 0.4)], TOTAL_MS),
+			typingEvents: makeTypingRun(9_000, 12),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const typingRegion = result.suggestions.find((region) => region.trigger === "typing");
+
+		expect(typingRegion).toBeDefined();
+		expect(typingRegion?.start).toBe(9_000);
+	});
+
+	/**
+	 * The trailing pad stays. Snapping out on the last keystroke cuts away the
+	 * moment someone reads back what they just typed.
+	 */
+	it("still holds for a pad after the last keystroke", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves([makeClick(8_000, 0.4, 0.4)], TOTAL_MS),
+			typingEvents: makeTypingRun(9_000, 12),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const typingRegion = result.suggestions.find((region) => region.trigger === "typing");
+
+		// Twelve keystrokes 120 ms apart put the last at 10_320.
+		expect(typingRegion?.end).toBe(10_820);
 	});
 });

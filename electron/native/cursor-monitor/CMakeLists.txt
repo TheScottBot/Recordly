@@ -4,6 +4,8 @@ project(cursor-monitor LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(cursor-monitor src/main.cpp)
+add_executable(cursor-monitor src/main.cpp src/caret_sampler.cpp)
 
-target_link_libraries(cursor-monitor PRIVATE user32)
+# ole32 and oleaut32 are for the UI Automation client and its SAFEARRAY of
+# caret rectangles; uuid supplies CLSID_CUIAutomation.
+target_link_libraries(cursor-monitor PRIVATE user32 ole32 oleaut32 uuid)

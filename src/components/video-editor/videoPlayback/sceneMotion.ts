@@ -93,8 +93,16 @@ export function resolveSceneZoomTarget({
 
 	const scale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
 	let focus = region.focus;
+	// A click zoom follows the pointer, because after a click the pointer is by
+	// definition at the thing being looked at. A typing zoom must not: while
+	// someone types the pointer is parked wherever they left it, often far from
+	// the text, and following it drags the camera off the field they are typing
+	// into. Until a caret track exists to follow instead, a typing region holds
+	// the focus it anchored to.
+	const followsThePointer = region.trigger !== "typing";
 	if (
 		!zoomClassicMode &&
+		followsThePointer &&
 		region.mode !== "manual" &&
 		cursorTelemetry &&
 		cursorTelemetry.length > 0

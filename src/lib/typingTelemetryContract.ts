@@ -27,9 +27,30 @@ export interface TypingEvent {
 	keyProducesCharacter?: boolean;
 }
 
-export const TYPING_TELEMETRY_VERSION = 1;
+/**
+ * Where the caret was, sampled while someone was typing, in the same
+ * normalised coordinates as a cursor sample: `0,0` is the top left of the
+ * captured area and `1,1` its bottom right.
+ *
+ * This exists because a typing zoom anchored to the click before the typing
+ * holds one fixed point, and text scrolls. Type enough lines and the words
+ * that began at the top of the page finish at the bottom, with the camera
+ * still pointed at the top. A caret track is the only thing that follows
+ * that, and the author reported exactly this on 23 September 2026.
+ *
+ * It says where on screen the caret was, never what was typed. See
+ * `PRIVACY.md`.
+ */
+export interface CaretSample {
+	timeMs: number;
+	cx: number;
+	cy: number;
+}
 
-export const SUPPORTED_TYPING_TELEMETRY_VERSIONS = [1] as const;
+/** Version 2 added `caretSamples`. A version 1 file is still read, and has none. */
+export const TYPING_TELEMETRY_VERSION = 2;
+
+export const SUPPORTED_TYPING_TELEMETRY_VERSIONS = [1, 2] as const;
 
 const supportedTypingTelemetryVersionSet: ReadonlySet<number> = new Set(
 	SUPPORTED_TYPING_TELEMETRY_VERSIONS,
@@ -64,5 +85,42 @@ export function normalizeTypingEvents(rawEvents: unknown): TypingEvent[] {
 						: undefined,
 			};
 		})
+		.sort((earlier, later) => earlier.timeMs - later.timeMs);
+}
+
+function isPositionInsideCapturedArea(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+/**
+ * Rebuilds every sample from scratch, for the same reason
+ * `normalizeTypingEvents` does.
+ *
+ * A sample outside the captured area is dropped rather than clamped. Clamping
+ * would pin the camera to an edge and hold it there for as long as someone
+ * typed into another window, which reads as a stuck zoom; dropping leaves the
+ * track with a gap, and a gap means the camera holds the last caret it
+ * trusted.
+ */
+export function normalizeCaretSamples(rawSamples: unknown): CaretSample[] {
+	if (!Array.isArray(rawSamples)) {
+		return [];
+	}
+
+	return rawSamples
+		.filter((sample: unknown) => Boolean(sample) && typeof sample === "object")
+		.map((sample: unknown) => sample as Partial<CaretSample>)
+		.filter(
+			(sample) =>
+				isPositionInsideCapturedArea(sample.cx) && isPositionInsideCapturedArea(sample.cy),
+		)
+		.map((sample) => ({
+			timeMs:
+				typeof sample.timeMs === "number" && Number.isFinite(sample.timeMs)
+					? Math.max(0, sample.timeMs)
+					: 0,
+			cx: sample.cx as number,
+			cy: sample.cy as number,
+		}))
 		.sort((earlier, later) => earlier.timeMs - later.timeMs);
 }

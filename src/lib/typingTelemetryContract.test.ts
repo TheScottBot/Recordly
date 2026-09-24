@@ -7,14 +7,15 @@ import {
 } from "./typingTelemetryContract";
 
 describe("typing telemetry contract", () => {
-	it("starts at version 1, because this file has never existed before", () => {
-		expect(TYPING_TELEMETRY_VERSION).toBe(1);
-		expect(SUPPORTED_TYPING_TELEMETRY_VERSIONS).toEqual([1]);
+	it("writes version 2 and still reads version 1, which held no caret track", () => {
+		expect(TYPING_TELEMETRY_VERSION).toBe(2);
+		expect(SUPPORTED_TYPING_TELEMETRY_VERSIONS).toEqual([1, 2]);
 		expect(isSupportedTypingTelemetryVersion(1)).toBe(true);
+		expect(isSupportedTypingTelemetryVersion(2)).toBe(true);
 	});
 
 	it("does not treat an unknown, missing or non numeric version as supported", () => {
-		for (const rejected of [0, 2, undefined, "1", Number.NaN, null]) {
+		for (const rejected of [0, 3, undefined, "1", Number.NaN, null]) {
 			expect(isSupportedTypingTelemetryVersion(rejected)).toBe(false);
 		}
 	});

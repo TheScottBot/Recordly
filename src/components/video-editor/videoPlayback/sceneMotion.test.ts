@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ZoomRegion } from "../types";
+import type { CursorTelemetryPoint, ZoomRegion } from "../types";
 import { createCursorFollowCameraState } from "./cursorFollowCamera";
 import {
 	resolvePreviewMotionMode,
@@ -39,6 +39,58 @@ describe("resolveSceneZoomTarget", () => {
 		expect(target.focus.cx).toBeCloseTo(2 / 3);
 		expect(target.focus.cy).toBeCloseTo(1 / 3);
 		expect(target.progress).toBe(1);
+	});
+});
+
+describe("a typing zoom holds its focus instead of chasing the pointer", () => {
+	// The pointer sits far from the text, which is what really happens: in the
+	// recording of 23 September 2026 it was 0.587 away from the field and
+	// motionless for the whole burst.
+	const parkedPointer: CursorTelemetryPoint[] = [
+		{ timeMs: 0, cx: 0.9, cy: 0.9, interactionType: "move" },
+		{ timeMs: 4000, cx: 0.9, cy: 0.9, interactionType: "move" },
+	];
+	const typingRegion: ZoomRegion = {
+		id: "zoom-typing",
+		startMs: 0,
+		endMs: 4000,
+		depth: 2,
+		focus: { cx: 0.3, cy: 0.3 },
+		mode: "auto",
+		trigger: "typing",
+	};
+
+	function focusAfterTwoFrames(region: ZoomRegion) {
+		const camera = createCursorFollowCameraState();
+		resolveSceneZoomTarget({
+			zoomRegions: [region],
+			timeMs: 2000,
+			cursorTelemetry: parkedPointer,
+			cursorFollowCamera: camera,
+		});
+		// The first frame only seeds the camera; any drift shows on the next one.
+		return resolveSceneZoomTarget({
+			zoomRegions: [region],
+			timeMs: 2100,
+			cursorTelemetry: parkedPointer,
+			cursorFollowCamera: camera,
+		}).focus;
+	}
+
+	it("keeps a typing region on the field it anchored to", () => {
+		const focus = focusAfterTwoFrames(typingRegion);
+
+		expect(focus.cx).toBeCloseTo(1 / 3);
+		expect(focus.cy).toBeCloseTo(1 / 3);
+	});
+
+	it("still lets a click region follow the pointer, which is where the attention is", () => {
+		const clickRegion: ZoomRegion = { ...typingRegion, id: "zoom-click", trigger: undefined };
+
+		const focus = focusAfterTwoFrames(clickRegion);
+
+		expect(focus.cx).toBeGreaterThan(1 / 3);
+		expect(focus.cy).toBeGreaterThan(1 / 3);
 	});
 });
 
@@ -97,7 +149,6 @@ describe("shouldComposePreviewFrame", () => {
 		).toBe(true);
 	});
 });
-
 
 describe("preview seek completion", () => {
 	it("holds the composed frame until seeking finishes, even with a pending refresh", () => {

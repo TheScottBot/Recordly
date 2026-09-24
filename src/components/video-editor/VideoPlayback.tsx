@@ -113,6 +113,7 @@ import {
 	stepSpringValue,
 } from "./videoPlayback/motionSmoothing";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
+import { isZoomFocusAdjustable } from "./videoPlayback/zoomFocusEditing";
 import { supportsPreviewPlaybackRate } from "./videoPlayback/playbackRate";
 import { PreviewVideoSource } from "./videoPlayback/previewVideoSource";
 import { usePreviewVideoReady } from "./videoPlayback/usePreviewVideoReady";
@@ -530,9 +531,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, []);
 
 		const initializePixiRenderer = useCallback(
-			async (
-				container: HTMLDivElement,
-			): Promise<Application> => {
+			async (container: HTMLDivElement): Promise<Application> => {
 				const backendOrder: PixiPreviewBackend[] = ["webgl", "webgpu"];
 				const attempts: PixiRendererAttempt[] = [];
 
@@ -1185,7 +1184,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			const regionId = selectedZoomIdRef.current;
 			if (!regionId) return;
 			const region = zoomRegionsRef.current.find((r) => r.id === regionId);
-			if (!region || region.mode !== "manual") return;
+			if (!isZoomFocusAdjustable(region)) return;
 			onSelectZoom(region.id);
 			event.preventDefault();
 			isDraggingFocusRef.current = true;

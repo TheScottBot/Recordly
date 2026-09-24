@@ -1,5 +1,6 @@
 import { ZOOM_DEPTH_SCALES, type ZoomFocus, type ZoomRegion } from "../types";
 import { clampFocusToStage } from "./focusUtils";
+import { isZoomFocusAdjustable } from "./zoomFocusEditing";
 
 interface OverlayUpdateParams {
 	overlayEl: HTMLDivElement;
@@ -13,7 +14,7 @@ interface OverlayUpdateParams {
 export function updateOverlayIndicator(params: OverlayUpdateParams) {
 	const { overlayEl, indicatorEl, region, focusOverride, baseMask, isPlaying } = params;
 
-	if (!region || region.mode === "auto") {
+	if (!isZoomFocusAdjustable(region)) {
 		indicatorEl.style.display = "none";
 		overlayEl.style.pointerEvents = "none";
 		return;

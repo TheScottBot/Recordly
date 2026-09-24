@@ -10,6 +10,7 @@ import {
 	type ZoomRegion,
 	type ZoomTrigger,
 } from "../types";
+import { applyZoomFocusEdit } from "../videoPlayback/zoomFocusEditing";
 
 interface UseZoomRegionCommandsParams {
 	videoPath: string | null;
@@ -134,9 +135,7 @@ export function useZoomRegionCommands({
 		(id: string, focus: ZoomFocus) => {
 			setZoomRegions((current) =>
 				current.map((region) =>
-					region.id === id
-						? { ...region, focus: clampFocusToDepth(focus, region.depth) }
-						: region,
+					region.id === id ? applyZoomFocusEdit(region, focus) : region,
 				),
 			);
 		},

@@ -99,7 +99,9 @@ describe("typing telemetry store", () => {
 	});
 
 	it("refuses an unsupported version and says why", () => {
-		for (const unsupportedVersion of [0, 2, undefined, "1", null]) {
+		// 2 moved out of this list when the caret track was added; 3 is the
+		// next version that does not exist yet.
+		for (const unsupportedVersion of [0, 3, undefined, "1", null]) {
 			expect(
 				parseTypingTelemetrySidecar({ version: unsupportedVersion, events: [] }),
 			).toEqual({

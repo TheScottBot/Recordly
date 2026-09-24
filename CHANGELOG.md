@@ -37,6 +37,13 @@ were cleared at which commit.
 - `src/components/video-editor/timeline/timeGapClustering.ts` is the gap
   clustering rule shared by click clusters and typing bursts.
 
+### Fixed
+
+- A typing zoom no longer drifts to the mouse. Zoom regions follow the
+  pointer while zoomed, which is right after a click and wrong during typing,
+  when the pointer is parked wherever it was left. A typing region now holds
+  the focus it anchored to, in the preview and in every export path.
+
 ### Added
 
 - Keyboard capture during recording, off by default, on Windows and Linux.
@@ -53,6 +60,9 @@ were cleared at which commit.
   the field it was typing into. A burst with no click to anchor it produces
   no suggestion. A recording with no typing produces exactly the suggestions
   it did before, pinned by a byte identical regression test.
+- A typing zoom can be dragged to a different focus, since its position is
+  inferred from the click before the typing rather than known. Dragging one
+  marks it as chosen by hand, so nothing moves it afterwards.
 
 ### Author gates cleared
 

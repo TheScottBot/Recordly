@@ -386,7 +386,14 @@ function buildTypingRegions(params: {
 			continue;
 		}
 
-		const requestedStart = Math.max(0, candidate.burst.firstKeystrokeMs - padMs);
+		// No pad ahead of the typing. A click zoom pads ahead because the camera
+		// should be settled when the click lands, and a pointer travelling to a
+		// target makes that early move read as intent. Typing has no approach:
+		// nothing on screen moves before the first keystroke, so a camera that
+		// has already zoomed reads as a fault rather than as anticipation. The
+		// pad after stays, because snapping out on the last keystroke cuts away
+		// the moment someone reads back what they have just typed.
+		const requestedStart = Math.max(0, candidate.burst.firstKeystrokeMs);
 		const requestedEnd = Math.min(totalMs, candidate.burst.lastKeystrokeMs + padMs);
 		let start = requestedStart;
 		let end = requestedEnd;
