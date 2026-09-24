@@ -151,6 +151,9 @@ were cleared at which commit.
 
 ### Author gates cleared
 
+- An exported recording follows the caret exactly as the preview does.
+  Checked on 24 September 2026 by re-rendering a GIF that had not followed
+  the page down when Enter pushed the caret to the bottom.
 - A typing zoom begins where the text is, moves as the text moves, and keeps
   up when the text is replaced. Checked on 24 September 2026 across typing
   that scrolls a page, selecting a page and typing over it, and swapping
