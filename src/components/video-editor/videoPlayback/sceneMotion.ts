@@ -1,5 +1,7 @@
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion } from "../types";
 import { ZOOM_DEPTH_SCALES } from "../types";
+import { resolveCaretFollowFocus } from "./caretFollowCamera";
 import { DEFAULT_FOCUS } from "./constants";
 import {
 	type CursorFollowCameraState,
@@ -69,6 +71,7 @@ export function resolveSceneZoomTarget({
 	zoomOutDurationMs,
 	zoomClassicMode,
 	cursorTelemetry,
+	caretTrack,
 	cursorFollowCamera,
 }: {
 	zoomRegions: ZoomRegion[];
@@ -79,6 +82,13 @@ export function resolveSceneZoomTarget({
 	zoomOutDurationMs?: number;
 	zoomClassicMode?: boolean;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/**
+	 * Where the caret was while someone typed, read from the recording's own
+	 * typing sidecar. Absent for every recording made before caret sampling
+	 * existed, and for every platform that does not sample it, in which case a
+	 * typing zoom holds the focus it anchored to.
+	 */
+	caretTrack?: readonly CaretSample[];
 	cursorFollowCamera: CursorFollowCameraState;
 }): SceneZoomTarget {
 	const { region, strength, blendedScale } = findDominantRegion(zoomRegions, timeMs, {
@@ -93,29 +103,36 @@ export function resolveSceneZoomTarget({
 
 	const scale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
 	let focus = region.focus;
-	// A click zoom follows the pointer, because after a click the pointer is by
-	// definition at the thing being looked at. A typing zoom must not: while
-	// someone types the pointer is parked wherever they left it, often far from
-	// the text, and following it drags the camera off the field they are typing
-	// into. Until a caret track exists to follow instead, a typing region holds
-	// the focus it anchored to.
-	const followsThePointer = region.trigger !== "typing";
-	if (
-		!zoomClassicMode &&
-		followsThePointer &&
-		region.mode !== "manual" &&
-		cursorTelemetry &&
-		cursorTelemetry.length > 0
-	) {
-		focus = computeCursorFollowFocus(
-			cursorFollowCamera,
-			cursorTelemetry,
-			cursorTimeMs,
-			scale,
-			strength,
-			region.focus,
-			{ snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO },
-		);
+	// Two zooms, two things worth watching. A click zoom follows the pointer,
+	// because after a click the pointer is by definition at the thing being
+	// looked at. A typing zoom must not: while someone types the pointer is
+	// parked wherever they left it, often far from the text, and following it
+	// drags the camera off the field. A typing zoom follows the caret instead,
+	// which is the only thing that stays with the text when the page scrolls.
+	//
+	// `manual` means the person dragged the focus themselves, and neither
+	// pointer nor caret gets to argue with that.
+	const followsTheCaret = region.trigger === "typing";
+	if (!zoomClassicMode && region.mode !== "manual") {
+		if (followsTheCaret) {
+			focus = resolveCaretFollowFocus({
+				caretTrack: caretTrack ?? [],
+				regionStartMs: region.startMs,
+				timeMs: cursorTimeMs,
+				anchorFocus: region.focus,
+				zoomScale: scale,
+			});
+		} else if (cursorTelemetry && cursorTelemetry.length > 0) {
+			focus = computeCursorFollowFocus(
+				cursorFollowCamera,
+				cursorTelemetry,
+				cursorTimeMs,
+				scale,
+				strength,
+				region.focus,
+				{ snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO },
+			);
+		}
 	}
 
 	return { scale, focus, progress: strength };

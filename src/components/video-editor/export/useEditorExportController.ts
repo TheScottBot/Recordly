@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import type { useI18n } from "@/contexts/I18nContext";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { getSmokeExportConfig } from "../smokeExportConfig";
 import type { useAppearanceState } from "../state/useAppearanceState";
@@ -35,6 +36,7 @@ type Input = {
 	effectiveSpeedRegions: SpeedRegion[];
 	effectiveZoomRegions: ZoomRegion[];
 	effectiveCursorTelemetry: CursorTelemetryPoint[];
+	caretTrack: readonly CaretSample[];
 	effectiveShowCursor: boolean;
 	cursorTelemetrySourcePath: string | null;
 	hasCaptionsForSidecar: boolean;
@@ -58,6 +60,7 @@ export function useEditorExportController(input: Input) {
 		effectiveSpeedRegions: input.effectiveSpeedRegions,
 		effectiveZoomRegions: input.effectiveZoomRegions,
 		effectiveCursorTelemetry: input.effectiveCursorTelemetry,
+		caretTrack: input.caretTrack,
 		effectiveShowCursor: input.effectiveShowCursor,
 		ensureSupportedMp4SourceDimensions: input.dimensions.ensureSupportedMp4SourceDimensions,
 		captionSidecarPayload: input.captionSidecarPayload,

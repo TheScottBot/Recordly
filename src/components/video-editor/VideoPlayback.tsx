@@ -12,6 +12,7 @@ import {
 	useState,
 } from "react";
 import { getAssetPath, getRenderableAssetUrl, getRenderableVideoUrl } from "@/lib/assetPath";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import { getWebcamShadowFilter } from "@/lib/exporter/shadowProfile";
 import { getSquircleSvgPath } from "@/lib/geometry/squircle";
 import {
@@ -261,6 +262,8 @@ interface VideoPlaybackProps {
 	onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
 	onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/** Where the caret was while someone typed; steers a typing zoom. */
+	caretTrack?: readonly CaretSample[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
 	cursorSize?: number;
@@ -346,6 +349,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			onAnnotationPositionChange,
 			onAnnotationSizeChange,
 			cursorTelemetry = [],
+			caretTrack = [],
 			showCursor = false,
 			cursorStyle = DEFAULT_CURSOR_STYLE,
 			cursorSize = DEFAULT_CURSOR_SIZE,
@@ -491,6 +495,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const connectedZoomEasingRef = useRef(connectedZoomEasing);
 		const cursorOverlayRef = useRef<PixiCursorOverlay | null>(null);
 		const cursorTelemetryRef = useRef<CursorTelemetryPoint[]>([]);
+		const caretTrackRef = useRef<readonly CaretSample[]>([]);
 		const showCursorRef = useRef(showCursor);
 		const cursorSizeRef = useRef(cursorSize);
 		const cursorStyleRef = useRef(cursorStyle);
@@ -1415,8 +1420,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		useEffect(() => {
 			cursorTelemetryRef.current = cursorTelemetry;
+			caretTrackRef.current = caretTrack;
 			requestPausedFrameRefresh();
-		}, [cursorTelemetry, requestPausedFrameRefresh]);
+		}, [cursorTelemetry, caretTrack, requestPausedFrameRefresh]);
 
 		useEffect(() => {
 			showCursorRef.current = showCursor;
@@ -2035,6 +2041,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					zoomOutDurationMs: zoomOutDurationMsRef.current,
 					zoomClassicMode: zoomClassicModeRef.current,
 					cursorTelemetry: cursorTelemetryRef.current,
+					caretTrack: caretTrackRef.current,
 					cursorFollowCamera: cursorFollowCameraRef.current,
 				});
 

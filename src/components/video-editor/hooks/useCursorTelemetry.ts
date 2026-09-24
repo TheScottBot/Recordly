@@ -1,5 +1,5 @@
 import { type MutableRefObject, useEffect, useMemo, useRef, useState } from "react";
-import type { TypingEvent } from "@/lib/typingTelemetryContract";
+import type { CaretSample, TypingEvent } from "@/lib/typingTelemetryContract";
 import type { useTimelineState } from "../state/useTimelineState";
 import { normalizeCursorTelemetry } from "../timeline/zoomSuggestionUtils";
 import type { CursorTelemetryPoint } from "../types";
@@ -94,22 +94,32 @@ export function useCursorTelemetry({
 	// Typing lives in its own sidecar beside the cursor one. A recording with no
 	// typing has no such file, which is ordinary and returns an empty list.
 	const [typingEvents, setTypingEvents] = useState<TypingEvent[]>([]);
+	// The caret track rides in the same sidecar, and is empty for every
+	// recording made before caret sampling existed.
+	const [caretTrack, setCaretTrack] = useState<CaretSample[]>([]);
 
 	useEffect(() => {
 		let mounted = true;
 
 		async function loadTypingEvents() {
 			if (!videoPath || !videoSourcePath) {
-				if (mounted) setTypingEvents([]);
+				if (mounted) {
+					setTypingEvents([]);
+					setCaretTrack([]);
+				}
 				return;
 			}
 			try {
 				const result = await window.electronAPI.getTypingTelemetry(videoSourcePath);
 				if (!mounted) return;
 				setTypingEvents(result.success ? result.events : []);
+				setCaretTrack(result.success ? (result.caretSamples ?? []) : []);
 			} catch (error) {
 				console.warn("Unable to load typing telemetry:", error);
-				if (mounted) setTypingEvents([]);
+				if (mounted) {
+					setTypingEvents([]);
+					setCaretTrack([]);
+				}
 			}
 		}
 
@@ -154,5 +164,6 @@ export function useCursorTelemetry({
 		normalizedCursorTelemetry: normalized,
 		effectiveCursorTelemetry: effective,
 		typingEvents,
+		caretTrack,
 	};
 }

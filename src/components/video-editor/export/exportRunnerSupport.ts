@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import type { SupportedMp4Dimensions } from "@/lib/exporter";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { getSmokeExportConfig } from "../smokeExportConfig";
 import type { useAppearanceState } from "../state/useAppearanceState";
@@ -26,6 +27,7 @@ export type ExportRunnerInput = {
 	effectiveSpeedRegions: SpeedRegion[];
 	effectiveZoomRegions: ZoomRegion[];
 	effectiveCursorTelemetry: CursorTelemetryPoint[];
+	caretTrack: readonly CaretSample[];
 	effectiveShowCursor: boolean;
 	ensureSupportedMp4SourceDimensions: (
 		frameRate: ReturnType<typeof useExportSettings>["mp4FrameRate"],

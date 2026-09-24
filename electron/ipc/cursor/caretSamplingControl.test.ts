@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CARET_SAMPLING_QUIET_MS, createCaretSamplingControl } from "./caretSamplingControl";
+import {
+	CARET_SAMPLING_QUIET_MS,
+	createCaretSamplingControl,
+	noteTypingForCaretSampling,
+	setActiveCaretSamplingControl,
+	stopActiveCaretSamplingControl,
+} from "./caretSamplingControl";
 
 describe("createCaretSamplingControl", () => {
 	beforeEach(() => {
@@ -90,5 +96,42 @@ describe("createCaretSamplingControl", () => {
 		createCaretSamplingControl({ send }).stop();
 
 		expect(send).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * `PRIVACY.md` says caret sampling cannot happen unless a key press switches
+ * it on, and that nothing samples on a platform where no control was ever
+ * created. Both rest on the holder refusing to invent one.
+ */
+describe("the active control holder", () => {
+	beforeEach(() => {
+		stopActiveCaretSamplingControl();
+	});
+
+	it("does nothing at all when no control has been created", () => {
+		expect(() => noteTypingForCaretSampling()).not.toThrow();
+	});
+
+	it("passes typing on to the control that is active", () => {
+		const send = vi.fn();
+		setActiveCaretSamplingControl(createCaretSamplingControl({ send }));
+
+		noteTypingForCaretSampling();
+
+		expect(send).toHaveBeenCalledExactlyOnceWith("caret-on");
+	});
+
+	it("stops sampling and forgets the control when the recording ends", () => {
+		const send = vi.fn();
+		setActiveCaretSamplingControl(createCaretSamplingControl({ send }));
+		noteTypingForCaretSampling();
+		send.mockClear();
+
+		stopActiveCaretSamplingControl();
+		noteTypingForCaretSampling();
+
+		// The off command, and then silence: no control is left to turn on.
+		expect(send).toHaveBeenCalledExactlyOnceWith("caret-off");
 	});
 });

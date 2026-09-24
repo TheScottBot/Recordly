@@ -79,6 +79,7 @@ import {
 	destroyPixiApplication,
 	initializePixiApplicationWithTimeout,
 } from "@/lib/pixiApplicationLifecycle";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import {
 	type AnnotationRenderAssets,
@@ -131,6 +132,8 @@ interface FrameRenderConfig {
 	previewWidth?: number;
 	previewHeight?: number;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/** Steers a typing zoom; empty for recordings made before caret sampling. */
+	caretTrack?: readonly CaretSample[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
 	cursorSize?: number;
@@ -3102,6 +3105,7 @@ export class FrameRenderer {
 			zoomOutDurationMs: this.config.zoomOutDurationMs,
 			zoomClassicMode: this.config.zoomClassicMode,
 			cursorTelemetry: this.config.cursorTelemetry,
+			caretTrack: this.config.caretTrack,
 			cursorFollowCamera: this.cursorFollowCamera,
 		});
 

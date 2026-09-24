@@ -289,7 +289,7 @@ export default function VideoEditor() {
 		handleRedo,
 	});
 	const {
-		cursor: { effectiveCursorTelemetry },
+		cursor: { effectiveCursorTelemetry, caretTrack },
 		projection,
 		audio,
 		captionCommands,
@@ -320,6 +320,7 @@ export default function VideoEditor() {
 		effectiveSpeedRegions,
 		effectiveZoomRegions,
 		effectiveCursorTelemetry,
+		caretTrack,
 		effectiveShowCursor,
 		cursorTelemetrySourcePath,
 		hasCaptionsForSidecar,

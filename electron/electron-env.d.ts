@@ -596,6 +596,7 @@ interface Window {
 		getTypingTelemetry: (videoPath?: string) => Promise<{
 			success: boolean;
 			events: import("../src/lib/typingTelemetryContract").TypingEvent[];
+			caretSamples: import("../src/lib/typingTelemetryContract").CaretSample[];
 			message?: string;
 			error?: string;
 		}>;

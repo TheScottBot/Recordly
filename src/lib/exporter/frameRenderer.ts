@@ -60,6 +60,7 @@ import {
 	scaleWebcamOverlayPixels,
 } from "@/components/video-editor/webcamOverlay";
 import { getAssetPath, getExportableVideoUrl, getRenderableAssetUrl } from "@/lib/assetPath";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import { getWebcamShadowFilter } from "@/lib/exporter/shadowProfile";
 import { drawSquircleOnCanvas, drawSquircleOnGraphics } from "@/lib/geometry/squircle";
 import {
@@ -112,6 +113,8 @@ interface FrameRenderConfig {
 	previewWidth?: number;
 	previewHeight?: number;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/** Steers a typing zoom; empty for recordings made before caret sampling. */
+	caretTrack?: readonly CaretSample[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
 	cursorSize?: number;
@@ -1606,6 +1609,7 @@ export class FrameRenderer {
 			zoomOutDurationMs: this.config.zoomOutDurationMs,
 			zoomClassicMode: this.config.zoomClassicMode,
 			cursorTelemetry: this.config.cursorTelemetry,
+			caretTrack: this.config.caretTrack,
 			cursorFollowCamera: this.cursorFollowCamera,
 		});
 

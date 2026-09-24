@@ -1,4 +1,5 @@
 import type { ComponentProps, Dispatch, RefObject, SetStateAction } from "react";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { useAppearanceState } from "../state/useAppearanceState";
@@ -31,6 +32,7 @@ type Props = {
 	audio: ReturnType<typeof useVideoEditorAudio>;
 	effectiveZoomRegions: ZoomRegion[];
 	effectiveCursorTelemetry: CursorTelemetryPoint[];
+	caretTrack: readonly CaretSample[];
 	effectiveShowCursor: boolean;
 	setDuration: Dispatch<SetStateAction<number>>;
 	setIsPreviewReady: Dispatch<SetStateAction<boolean>>;
@@ -54,6 +56,7 @@ export function EditorVideoPreview({
 	audio,
 	effectiveZoomRegions,
 	effectiveCursorTelemetry,
+	caretTrack,
 	effectiveShowCursor,
 	setDuration,
 	setIsPreviewReady,
@@ -103,6 +106,7 @@ export function EditorVideoPreview({
 			autoCaptionSettings={timeline.autoCaptionSettings}
 			selectedAnnotationId={timeline.selectedAnnotationId}
 			cursorTelemetry={effectiveCursorTelemetry}
+			caretTrack={caretTrack}
 			showCursor={effectiveShowCursor}
 			cursorStyle={appearance.cursorStyle}
 			cursorSize={appearance.cursorSize}

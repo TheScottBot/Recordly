@@ -23,6 +23,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { useI18n } from "@/contexts/I18nContext";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { CaptionEditTarget } from "../captionEditing";
@@ -58,6 +59,7 @@ type Props = {
 	zoomCommands: ReturnType<typeof useZoomRegionCommands>;
 	annotationCommands: ReturnType<typeof useAnnotationRegionCommands>;
 	effectiveCursorTelemetry: ReturnType<typeof useTimelineState>["cursorTelemetry"];
+	caretTrack: readonly CaretSample[];
 	effectiveShowCursor: boolean;
 	isCropped: boolean;
 	handleOpenCropEditor: () => void;
@@ -100,6 +102,7 @@ export function EditorPreviewPanel(props: Props) {
 		zoomCommands,
 		annotationCommands,
 		effectiveCursorTelemetry,
+		caretTrack,
 		effectiveShowCursor,
 		isCropped,
 		handleOpenCropEditor,
@@ -192,6 +195,7 @@ export function EditorPreviewPanel(props: Props) {
 									audio={audio}
 									effectiveZoomRegions={projection.effectiveZoomRegions}
 									effectiveCursorTelemetry={effectiveCursorTelemetry}
+									caretTrack={caretTrack}
 									effectiveShowCursor={effectiveShowCursor}
 									setDuration={setDuration}
 									setIsPreviewReady={setIsPreviewReady}

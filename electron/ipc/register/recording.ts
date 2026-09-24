@@ -1993,7 +1993,7 @@ export function registerRecordingHandlers(
 	ipcMain.handle("get-typing-telemetry", async (_, videoPath?: string) => {
 		const targetVideoPath = normalizeVideoSourcePath(videoPath ?? currentVideoPath);
 		if (!targetVideoPath) {
-			return { success: true, events: [] };
+			return { success: true, events: [], caretSamples: [] };
 		}
 
 		const sidecarPath = getTypingTelemetryPathForVideo(targetVideoPath);
@@ -2014,15 +2014,16 @@ export function registerRecordingHandlers(
 					message: "Typing telemetry sidecar rejected",
 					error: sidecar.reason,
 					events: [],
+					caretSamples: [],
 				};
 			}
 
-			return { success: true, events: sidecar.events };
+			return { success: true, events: sidecar.events, caretSamples: sidecar.caretSamples };
 		} catch (error) {
 			const nodeError = error as NodeJS.ErrnoException;
 			// No file means the recording held no typing, which is ordinary.
 			if (nodeError.code === "ENOENT") {
-				return { success: true, events: [] };
+				return { success: true, events: [], caretSamples: [] };
 			}
 			console.error("Failed to load typing telemetry:", error);
 			return {
@@ -2030,6 +2031,7 @@ export function registerRecordingHandlers(
 				message: "Failed to load typing telemetry",
 				error: String(error),
 				events: [],
+				caretSamples: [],
 			};
 		}
 	});

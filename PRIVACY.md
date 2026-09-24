@@ -41,18 +41,59 @@ When it is on, Recordly writes a second file beside the recording,
   digit, space, punctuation mark, Enter, Backspace or Delete) rather than
   being a modifier, arrow, function or lock key
 
-That is all. There is no position in it either: where a typing zoom points is
-worked out from the click you made before you started typing, never from
-where the pointer happened to be. If a recording holds no typing, the file is
-not written at all. Recordly does not record which key was pressed, what character
-it produced, which modifiers were held, or anything from which the text you
-typed could be reconstructed. The key's identity is read once, inside the
-capture callback, to produce that single yes or no, and is then discarded.
-It is never written to the sidecar, a log line, a crash report or a
-diagnostic bundle. A test asserts this on every change.
+That is all a key press holds: no position, and nothing about which key it
+was. If a recording holds no typing, the file is not written at all. Recordly
+does not record which key was pressed, what character it produced, which
+modifiers were held, or anything from which the text you typed could be
+reconstructed. The key's identity is read once, inside the capture callback,
+to produce that single yes or no, and is then discarded. It is never written
+to the sidecar, a log line, a crash report or a diagnostic bundle. A test
+asserts this on every change.
 
 The purpose is timing only: a burst of key presses tells the editor that you
 were typing, so it can suggest a zoom onto the field you had clicked into.
+
+This file may also hold a caret track, which does carry positions. It is
+described next, and an earlier version of this page was wrong to say the
+file held no position at all.
+
+### The caret track
+
+On Windows, while keyboard capture is on, Recordly also records where the
+text caret was, but only while you are typing. Each entry holds:
+
+- the time since the recording started
+- the caret position, as a fraction of the captured area
+
+Nothing else. It is a position, never content: Recordly asks Windows where
+the caret is, not what is around it. It does not read the text of the field,
+what the field is called, or the title of the window you typed into. A test
+rebuilds every entry from scratch when the file is read or written, so a
+field that has no business being there cannot survive a round trip however
+it got in.
+
+Sampling starts on your first key press and stops about two and a half
+seconds after your last, so a recording is not sampled while you are not
+typing. A position is recorded roughly four times a second, and only when it
+has actually moved. If the caret cannot be placed inside the captured area,
+which is what happens when you type into some other window, the sample is
+dropped rather than stored.
+
+The purpose is that a typing zoom can follow the text. Before this, a typing
+zoom held one fixed point, taken from the click you made before you started
+typing. Text moves: type enough lines and the words that began at the top of
+the page finish at the bottom, with the zoom still pointed at the top. The
+caret is the only thing that stays with the text, so it is what the camera
+follows.
+
+It is available on Windows only. Recordly reads the caret through the
+accessibility interface Windows provides for it, falling back to the older
+caret interface where that answers instead. On macOS and Linux no caret is
+sampled and a typing zoom holds the click it was anchored to.
+
+Keyboard capture off means no caret sampling either. Sampling is only ever
+switched on by a key press, and with keyboard capture off there is no key
+press to switch it on.
 
 ### What turning it off means
 
@@ -95,7 +136,15 @@ Nothing is uploaded.
 If you type a password, a private message or anything else sensitive while
 recording, the recording contains a video of you doing it, whether or not
 keyboard capture is on. With keyboard capture on, the editor may also suggest
-a zoom onto the field you were typing into, because it cannot tell a
-password field from any other field and does not try to. Review a recording
-before sharing it, and pause the recording before typing anything you would
-not want on screen.
+a zoom onto the field you were typing into, and the caret track records where
+on screen that field was, because Recordly cannot tell a password field from
+any other field and does not try to. Review a recording before sharing it,
+and pause the recording before typing anything you would not want on screen.
+
+The sidecars are separate files from the video, and exporting writes none
+beside the exported file: an exported video carries no telemetry with it.
+What that also means is that trimming or cropping in the editor does not
+trim the sidecars beside the original recording. They go on describing the
+whole recording as it was made, including the parts you cut. If you copy a
+recordings folder somewhere, the sidecars go with it unless you leave them
+behind.

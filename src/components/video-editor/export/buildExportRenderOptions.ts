@@ -1,4 +1,5 @@
 import type { ExportProgress } from "@/lib/exporter";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import { toFileUrl } from "../projectPersistence";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
@@ -13,6 +14,7 @@ type BuildExportRenderOptionsInput = {
 	effectiveSpeedRegions: SpeedRegion[];
 	effectiveZoomRegions: ZoomRegion[];
 	effectiveCursorTelemetry: CursorTelemetryPoint[];
+	caretTrack: readonly CaretSample[];
 	effectiveShowCursor: boolean;
 	previewWidth: number;
 	previewHeight: number;
@@ -26,6 +28,7 @@ export function buildExportRenderOptions({
 	effectiveSpeedRegions,
 	effectiveZoomRegions,
 	effectiveCursorTelemetry,
+	caretTrack,
 	effectiveShowCursor,
 	previewWidth,
 	previewHeight,
@@ -63,6 +66,7 @@ export function buildExportRenderOptions({
 		autoCaptionSettings: timeline.autoCaptionSettings,
 		zoomRegions: effectiveZoomRegions,
 		cursorTelemetry: effectiveCursorTelemetry,
+		caretTrack,
 		showCursor: effectiveShowCursor,
 		cursorStyle: appearance.cursorStyle,
 		cursorSize: appearance.cursorSize,

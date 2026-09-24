@@ -42,6 +42,7 @@ import {
 	isWebcamCropRegionDefault,
 } from "@/components/video-editor/webcamOverlay";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import {
 	DEFAULT_WALLPAPER_PATH,
 	DEFAULT_WALLPAPER_RELATIVE_PATH,
@@ -123,6 +124,8 @@ interface VideoExporterConfig extends ExportConfig {
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/** Steers a typing zoom; empty for recordings made before caret sampling. */
+	caretTrack?: readonly CaretSample[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
 	cursorSize?: number;
@@ -2340,6 +2343,7 @@ export class ModernVideoExporter {
 				zoomOutDurationMs: this.config.zoomOutDurationMs,
 				zoomClassicMode: this.config.zoomClassicMode,
 				cursorTelemetry: cursorTelemetry ?? [],
+				caretTrack: this.config.caretTrack,
 				cursorFollowCamera,
 			});
 

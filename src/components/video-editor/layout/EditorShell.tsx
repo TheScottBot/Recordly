@@ -209,6 +209,7 @@ export function EditorShell(props: Props) {
 						zoomCommands={zoomCommands}
 						annotationCommands={annotationCommands}
 						effectiveCursorTelemetry={cursor.effectiveCursorTelemetry}
+						caretTrack={cursor.caretTrack}
 						effectiveShowCursor={effectiveShowCursor}
 						isCropped={ui.isCropped}
 						handleOpenCropEditor={ui.handleOpenCropEditor}

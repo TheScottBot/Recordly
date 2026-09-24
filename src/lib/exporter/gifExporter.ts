@@ -1,4 +1,5 @@
 import GIF from "gif.js";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import type {
 	AnnotationRegion,
 	AutoCaptionSettings,
@@ -65,6 +66,8 @@ interface GifExporterConfig {
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/** Steers a typing zoom; empty for recordings made before caret sampling. */
+	caretTrack?: readonly CaretSample[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
 	cursorSize?: number;

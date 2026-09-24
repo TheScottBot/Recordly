@@ -12,10 +12,14 @@ were cleared at which commit.
 
 ### Contract
 
-- Typing telemetry sidecar, `<recording>.typing.json`, version 1. Holds one
+- Typing telemetry sidecar, `<recording>.typing.json`, version 2. Holds one
   entry per key press: the time since the recording started, and whether the
-  key produces a character. No position, and nothing about which key. Absent
-  when a recording holds no typing. Deleted with its recording.
+  key produces a character. Nothing about which key. Absent when a recording
+  holds no typing. Deleted with its recording.
+- Version 2 adds `caretSamples`, a caret track: the time and the caret
+  position as a fraction of the captured area, sampled only while typing.
+  The key is left out entirely when nothing was sampled, so its presence
+  means a track exists. Version 1 is still read and has no track.
 - The cursor telemetry sidecar is unchanged at version 2. Typing was added
   without touching it, so every recording ever made reads and writes the same
   shape. A version it does not know is now refused and reported rather than
@@ -36,13 +40,32 @@ were cleared at which commit.
   Not yet wired into zoom suggestions.
 - `src/components/video-editor/timeline/timeGapClustering.ts` is the gap
   clustering rule shared by click clusters and typing bursts.
+- `electron/ipc/cursor/cursorMonitorProtocol.ts` is the single parser for
+  the lines `cursor-monitor` speaks, so the grammar can be tested without
+  a spawned process. The monitor no longer carries its own expressions.
+- `locateDipPointInCapturedArea` in `electron/ipc/cursor/telemetry.ts` is
+  the one mapping from a screen point into the captured area, shared by the
+  pointer and the caret so the two can never disagree about where a point in
+  the frame is. The pointer clamps at the edge and the caret refuses, which
+  is the only difference between them.
+- `src/components/video-editor/videoPlayback/caretFollowCamera.ts` decides
+  where a typing zoom looks. Pure and deterministic, folded from the start of
+  the region on every call rather than carried between frames, because the
+  preview and all three export renderers share it.
 
 ### Fixed
 
 - A typing zoom no longer drifts to the mouse. Zoom regions follow the
   pointer while zoomed, which is right after a click and wrong during typing,
-  when the pointer is parked wherever it was left. A typing region now holds
-  the focus it anchored to, in the preview and in every export path.
+  when the pointer is parked wherever it was left. A typing region now
+  follows the caret instead, in the preview and in every export path, and
+  holds the focus it anchored to where there is no caret track to follow.
+- A typing zoom no longer begins before the typing does. Typing regions
+  padded half a second ahead of the first key press, copied from click
+  behaviour where it belongs: a click zoom settles before the click lands,
+  and the pointer travelling to a target makes that early move read as
+  intent. Nothing moves on screen before a key press, so the same padding
+  read as a fault. The pad after the last key press stays.
 
 ### Added
 
@@ -63,7 +86,29 @@ were cleared at which commit.
 - A typing zoom can be dragged to a different focus, since its position is
   inferred from the click before the typing rather than known. Dragging one
   marks it as chosen by hand, so nothing moves it afterwards.
+- Caret tracking on Windows, behind the same keyboard capture setting. While
+  someone is typing, `cursor-monitor.exe` samples the caret about four times
+  a second on its own thread and reports it when it moves; the main process
+  places it in the captured area and stores it in the typing sidecar.
+  Sampling starts on the first key press and stops two and a half seconds
+  after the last, so nothing is sampled while nobody is typing. A caret that
+  cannot be placed inside the captured area is dropped rather than stored.
+  See `PRIVACY.md`.
+- A typing zoom follows the caret, which is what lets it stay with text that
+  scrolls. It does not glue itself to the caret: it holds while the caret is
+  comfortably inside the frame and moves only when the caret would otherwise
+  leave it, by the least it can. A zoom whose focus was dragged by hand is
+  not moved by the track, and a recording with no track holds its click
+  anchor exactly as before.
 
 ### Author gates cleared
 
-None yet.
+- A typing zoom follows text that scrolls. Checked on 24 September 2026
+  against a recording of typing past the bottom of a window: the camera held
+  while the caret walked down inside the dead zone, panned as it raced to the
+  bottom, then held for the last three and a half seconds while the page
+  scrolled under a caret pinned in place.
+- The typing sidecar holds nothing it should not. Checked against the bytes
+  of a real recording on 24 September 2026, not against the documentation:
+  every key in the file at any depth was `version`, `events`, `timeMs`,
+  `keyProducesCharacter`, `caretSamples`, `cx` and `cy`.

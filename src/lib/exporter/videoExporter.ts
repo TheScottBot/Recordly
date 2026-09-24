@@ -18,6 +18,7 @@ import type {
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
+import type { CaretSample } from "@/lib/typingTelemetryContract";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import { buildEditedTrackSourceSegments, classifyEditedTrackStrategy } from "./editedTrackStrategy";
 import {
@@ -74,6 +75,8 @@ interface VideoExporterConfig extends ExportConfig {
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
+	/** Steers a typing zoom; empty for recordings made before caret sampling. */
+	caretTrack?: readonly CaretSample[];
 	showCursor?: boolean;
 	cursorStyle?: CursorStyle;
 	cursorSize?: number;
