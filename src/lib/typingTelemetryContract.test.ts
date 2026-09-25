@@ -7,15 +7,17 @@ import {
 } from "./typingTelemetryContract";
 
 describe("typing telemetry contract", () => {
-	it("writes version 2 and still reads version 1, which held no caret track", () => {
-		expect(TYPING_TELEMETRY_VERSION).toBe(2);
-		expect(SUPPORTED_TYPING_TELEMETRY_VERSIONS).toEqual([1, 2]);
-		expect(isSupportedTypingTelemetryVersion(1)).toBe(true);
-		expect(isSupportedTypingTelemetryVersion(2)).toBe(true);
+	it("writes version 3 and still reads the versions before it", () => {
+		expect(TYPING_TELEMETRY_VERSION).toBe(3);
+		expect(SUPPORTED_TYPING_TELEMETRY_VERSIONS).toEqual([1, 2, 3]);
+		// 1 held no caret track, 2 held one but could not say it was cut short.
+		for (const readable of [1, 2, 3]) {
+			expect(isSupportedTypingTelemetryVersion(readable)).toBe(true);
+		}
 	});
 
 	it("does not treat an unknown, missing or non numeric version as supported", () => {
-		for (const rejected of [0, 3, undefined, "1", Number.NaN, null]) {
+		for (const rejected of [0, 4, undefined, "1", Number.NaN, null]) {
 			expect(isSupportedTypingTelemetryVersion(rejected)).toBe(false);
 		}
 	});

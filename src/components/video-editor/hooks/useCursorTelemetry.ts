@@ -97,6 +97,9 @@ export function useCursorTelemetry({
 	// The caret track rides in the same sidecar, and is empty for every
 	// recording made before caret sampling existed.
 	const [caretTrack, setCaretTrack] = useState<CaretSample[]>([]);
+	// True when the recording ran into the caret sample cap, which explains a
+	// zoom that starts well and then stops following.
+	const [caretTrackTruncated, setCaretTrackTruncated] = useState(false);
 
 	useEffect(() => {
 		let mounted = true;
@@ -106,6 +109,7 @@ export function useCursorTelemetry({
 				if (mounted) {
 					setTypingEvents([]);
 					setCaretTrack([]);
+					setCaretTrackTruncated(false);
 				}
 				return;
 			}
@@ -114,11 +118,13 @@ export function useCursorTelemetry({
 				if (!mounted) return;
 				setTypingEvents(result.success ? result.events : []);
 				setCaretTrack(result.success ? (result.caretSamples ?? []) : []);
+				setCaretTrackTruncated(result.success && result.caretTrackTruncated === true);
 			} catch (error) {
 				console.warn("Unable to load typing telemetry:", error);
 				if (mounted) {
 					setTypingEvents([]);
 					setCaretTrack([]);
+					setCaretTrackTruncated(false);
 				}
 			}
 		}
@@ -165,5 +171,6 @@ export function useCursorTelemetry({
 		effectiveCursorTelemetry: effective,
 		typingEvents,
 		caretTrack,
+		caretTrackTruncated,
 	};
 }

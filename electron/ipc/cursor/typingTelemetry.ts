@@ -19,6 +19,7 @@ import {
 import {
 	activeCaretSamples,
 	activeTypingEvents,
+	caretTrackTruncated,
 	pendingCaretSamples,
 	pendingTypingEvents,
 	setPendingCaretSamples,
@@ -39,7 +40,14 @@ export function pushTypingEvent(timeMs: number, keyProducesCharacter: boolean | 
 }
 
 export type TypingTelemetrySidecarParseResult =
-	| { status: "ok"; version: number; events: TypingEvent[]; caretSamples: CaretSample[] }
+	| {
+			status: "ok";
+			version: number;
+			events: TypingEvent[];
+			caretSamples: CaretSample[];
+			/** True when the sample cap discarded part of the track. */
+			caretTrackTruncated: boolean;
+	  }
 	| {
 			status: "rejected";
 			reason: "unsupported-version" | "malformed";
@@ -57,7 +65,12 @@ export function parseTypingTelemetrySidecar(parsed: unknown): TypingTelemetrySid
 		return { status: "rejected", reason: "malformed", events: [] };
 	}
 
-	const sidecar = parsed as { version?: unknown; events?: unknown; caretSamples?: unknown };
+	const sidecar = parsed as {
+		version?: unknown;
+		events?: unknown;
+		caretSamples?: unknown;
+		caretTrackTruncated?: unknown;
+	};
 	if (!Array.isArray(sidecar.events)) {
 		return { status: "rejected", reason: "malformed", version: sidecar.version, events: [] };
 	}
@@ -80,6 +93,10 @@ export function parseTypingTelemetrySidecar(parsed: unknown): TypingTelemetrySid
 		// too and remove the zoom entirely, which is worse. A version 1 file
 		// has no track at all and lands here as an empty one.
 		caretSamples: normalizeCaretSamples(sidecar.caretSamples),
+		// Exactly true or not at all, for the same reason the keyboard
+		// preference is: a value that arrived any other way is not a claim.
+		// Versions before 3 could not say it and read as false.
+		caretTrackTruncated: sidecar.caretTrackTruncated === true,
 	};
 }
 
@@ -91,6 +108,7 @@ export async function writeTypingTelemetry(
 	videoPath: string,
 	events: readonly TypingEvent[],
 	caretSamples: readonly CaretSample[] = [],
+	caretTrackWasTruncated = false,
 ) {
 	const sidecarPath = getTypingTelemetryPathForVideo(videoPath);
 	const normalizedEvents = normalizeTypingEvents(events);
@@ -115,6 +133,9 @@ export async function writeTypingTelemetry(
 				...(normalizedCaretSamples.length > 0
 					? { caretSamples: normalizedCaretSamples }
 					: {}),
+				// Left out unless it happened, so the file says something only
+				// when there is something to say.
+				...(caretTrackWasTruncated ? { caretTrackTruncated: true } : {}),
 			},
 			null,
 			2,
@@ -156,7 +177,12 @@ export function snapshotTypingTelemetryForPersistence() {
 
 export async function persistPendingTypingTelemetry(videoPath: string) {
 	if (pendingTypingEvents.length > 0) {
-		await writeTypingTelemetry(videoPath, pendingTypingEvents, pendingCaretSamples);
+		await writeTypingTelemetry(
+			videoPath,
+			pendingTypingEvents,
+			pendingCaretSamples,
+			caretTrackTruncated,
+		);
 	}
 	setPendingTypingEvents([]);
 	setPendingCaretSamples([]);

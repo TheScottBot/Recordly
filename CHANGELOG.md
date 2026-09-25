@@ -12,7 +12,7 @@ were cleared at which commit.
 
 ### Contract
 
-- Typing telemetry sidecar, `<recording>.typing.json`, version 2. Holds one
+- Typing telemetry sidecar, `<recording>.typing.json`, version 3. Holds one
   entry per key press: the time since the recording started, and whether the
   key produces a character. Nothing about which key. Absent when a recording
   holds no typing. Deleted with its recording.
@@ -20,6 +20,10 @@ were cleared at which commit.
   position as a fraction of the captured area, sampled only while typing.
   The key is left out entirely when nothing was sampled, so its presence
   means a track exists. Version 1 is still read and has no track.
+- Version 3 adds `caretTrackTruncated`, written only when the sample cap
+  discarded part of the track. A track that ran out is otherwise
+  indistinguishable from one that ended, and the zoom simply stops
+  following. Versions 1 and 2 are still read and cannot say it.
 - The cursor telemetry sidecar is unchanged at version 2. Typing was added
   without touching it, so every recording ever made reads and writes the same
   shape. A version it does not know is now refused and reported rather than
@@ -151,9 +155,27 @@ were cleared at which commit.
 
 ### Author gates cleared
 
+- Typing that carries on past a click gets a zoom again. A burst was shrunk
+  to the first free stretch ahead of it and never split, so one click in the
+  middle silenced every word typed after it. Switching window or browser tab
+  is a click, so typing, switching, and typing again is the ordinary case
+  rather than an edge one. A burst now fills every stretch left free between
+  the click regions, and each stretch takes its focus from the caret inside
+  it, so a burst carried across a tab switch no longer points at the tab it
+  started in.
+- The editor now says what the typing path did, when there is something to
+  say. Suggesting zooms reports a typing moment that produced no zoom because
+  nothing recorded where the typing was, a typing zoom shortened to make room
+  for a click zoom, and a caret track that hit its limit. Those counts have
+  been gathered since typing zooms existed and had never been shown to
+  anybody. Silence where everything worked.
 - An exported recording follows the caret exactly as the preview does.
   Checked on 24 September 2026 by re-rendering a GIF that had not followed
   the page down when Enter pushed the caret to the bottom.
+- Typing that continues after a click, a window change or a browser tab
+  change keeps its zoom. Checked on 25 September 2026 against a recording of
+  typing, switching tab, and typing again three times over: three bursts,
+  three zooms, none declined, each pointed at the text it belonged to.
 - A typing zoom begins where the text is, moves as the text moves, and keeps
   up when the text is replaced. Checked on 24 September 2026 across typing
   that scrolls a page, selecting a page and typing over it, and swapping

@@ -29,6 +29,7 @@ type Props = {
 	normalizedCursorTelemetry: ReturnType<typeof useTimelineState>["cursorTelemetry"];
 	typingEvents: TypingEvent[];
 	caretTrack: readonly CaretSample[];
+	caretTrackTruncated: boolean;
 	autoSuggestZoomsTrigger: number;
 	handleAutoSuggestZoomsConsumed: () => void;
 	disableSuggestedZooms: boolean;
@@ -54,6 +55,7 @@ export function EditorTimelinePanel(props: Props) {
 		normalizedCursorTelemetry,
 		typingEvents,
 		caretTrack,
+		caretTrackTruncated,
 		autoSuggestZoomsTrigger,
 		handleAutoSuggestZoomsConsumed,
 		disableSuggestedZooms,
@@ -75,6 +77,7 @@ export function EditorTimelinePanel(props: Props) {
 				cursorTelemetry={normalizedCursorTelemetry}
 				typingEvents={typingEvents}
 				caretTrack={caretTrack}
+				caretTrackTruncated={caretTrackTruncated}
 				autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 				onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 				disableSuggestedZooms={disableSuggestedZooms}

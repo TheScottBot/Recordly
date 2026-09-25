@@ -85,6 +85,8 @@ export let activeTypingEvents: TypingEvent[] = [];
 export let pendingTypingEvents: TypingEvent[] = [];
 export let activeCaretSamples: CaretSample[] = [];
 export let pendingCaretSamples: CaretSample[] = [];
+/** True once the sample cap has discarded a caret sample. See PRIVACY.md and the contract. */
+export let caretTrackTruncated = false;
 export let isCursorCaptureActive = false;
 export let interactionCaptureCleanup: (() => void) | null = null;
 export let hasLoggedInteractionHookFailure = false;
@@ -267,6 +269,10 @@ export function setActiveCaretSamples(v: CaretSample[]) {
 
 export function setPendingCaretSamples(v: CaretSample[]) {
 	pendingCaretSamples = v;
+}
+
+export function setCaretTrackTruncated(v: boolean) {
+	caretTrackTruncated = v;
 }
 
 export function setPendingCursorSamples(v: CursorTelemetryPoint[]) {

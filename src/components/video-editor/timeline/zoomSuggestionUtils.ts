@@ -371,14 +371,69 @@ export const MIN_TYPING_REGION_MS = 400;
  * inside and cut short at the first thing it runs into. It is never split
  * and never pushes anything else aside.
  */
+/**
+ * The stretches of `span` that nothing else has claimed, in order.
+ *
+ * A burst used to be shrunk to the first free stretch ahead of it and never
+ * split, so one click in the middle of a long burst silenced every word after
+ * it. Switching windows or browser tabs is a click, so carrying on typing
+ * somewhere else is the ordinary case, not an edge one. The author lost three
+ * bursts to this in a single recording on 25 September 2026.
+ */
+function freeStretchesWithin(
+	span: { start: number; end: number },
+	occupiedSpans: ReadonlyArray<{ start: number; end: number }>,
+): Array<{ start: number; end: number }> {
+	const blocking = occupiedSpans
+		.filter((occupied) => occupied.start < span.end && occupied.end > span.start)
+		.sort((earlier, later) => earlier.start - later.start);
+
+	const stretches: Array<{ start: number; end: number }> = [];
+	let cursor = span.start;
+
+	for (const occupied of blocking) {
+		if (occupied.start > cursor) {
+			stretches.push({ start: cursor, end: occupied.start });
+		}
+		cursor = Math.max(cursor, occupied.end);
+	}
+
+	if (cursor < span.end) {
+		stretches.push({ start: cursor, end: span.end });
+	}
+
+	return stretches;
+}
+
+/** The caret inside a stretch, which is where that stretch of typing was. */
+function caretWithin(
+	stretch: { start: number; end: number },
+	caretTrack: readonly CaretSample[],
+): ZoomFocus | null {
+	for (const sample of caretTrack) {
+		if (sample.timeMs >= stretch.start && sample.timeMs <= stretch.end) {
+			return { cx: sample.cx, cy: sample.cy };
+		}
+	}
+
+	return null;
+}
+
 function buildTypingRegions(params: {
 	typingCandidates: TypingBurstCandidate[];
 	occupiedSpans: Array<{ start: number; end: number }>;
+	caretTrack: readonly CaretSample[];
 	totalMs: number;
 	padMs: number;
-}): { regions: SuggestedZoomRegion[]; burstsLimitedByClick: number } {
-	const { typingCandidates, occupiedSpans, totalMs, padMs } = params;
+}): {
+	regions: SuggestedZoomRegion[];
+	/** Bursts that produced at least one region, which is not the same as how many regions. */
+	burstsApplied: number;
+	burstsLimitedByClick: number;
+} {
+	const { typingCandidates, occupiedSpans, caretTrack, totalMs, padMs } = params;
 	const regions: SuggestedZoomRegion[] = [];
+	let burstsApplied = 0;
 	let burstsLimitedByClick = 0;
 
 	for (const candidate of typingCandidates) {
@@ -395,46 +450,46 @@ function buildTypingRegions(params: {
 		// the moment someone reads back what they have just typed.
 		const requestedStart = Math.max(0, candidate.burst.firstKeystrokeMs);
 		const requestedEnd = Math.min(totalMs, candidate.burst.lastKeystrokeMs + padMs);
-		let start = requestedStart;
-		let end = requestedEnd;
 
-		// Move past anything the burst starts inside, then stop at the first
-		// thing ahead of it. Both leave the other region untouched.
-		for (const span of occupiedSpans) {
-			if (start < span.end && end > span.start) {
-				if (span.start <= start) {
-					start = span.end;
-				} else {
-					end = Math.min(end, span.start);
-				}
-			}
-		}
+		const stretches = freeStretchesWithin(
+			{ start: requestedStart, end: requestedEnd },
+			occupiedSpans,
+		);
+		const usable = stretches.filter(
+			(stretch) => stretch.end - stretch.start >= MIN_TYPING_REGION_MS,
+		);
 
-		// Losing padding is not a loss worth counting; failing to cover the
-		// typing itself is, and so is being dropped entirely.
-		const coversTheTyping =
-			start <= candidate.burst.firstKeystrokeMs && end >= candidate.burst.lastKeystrokeMs;
-		const hasRoom = end - start >= MIN_TYPING_REGION_MS;
-
-		if (!coversTheTyping || !hasRoom) {
+		// Losing padding is not a loss worth counting; losing time somebody
+		// spent typing is, and so is being dropped entirely.
+		const coveredMs = usable.reduce(
+			(total, stretch) => total + (stretch.end - stretch.start),
+			0,
+		);
+		const typedMs = candidate.burst.lastKeystrokeMs - candidate.burst.firstKeystrokeMs;
+		if (usable.length === 0 || coveredMs < typedMs) {
 			burstsLimitedByClick += 1;
 		}
 
-		if (!hasRoom) {
-			continue;
+		if (usable.length > 0) {
+			burstsApplied += 1;
 		}
 
-		const region: SuggestedZoomRegion = {
-			start,
-			end,
-			focus: candidate.focus,
-			trigger: "typing",
-		};
-		regions.push(region);
-		occupiedSpans.push({ start, end });
+		for (const stretch of usable) {
+			const region: SuggestedZoomRegion = {
+				start: stretch.start,
+				end: stretch.end,
+				// Each stretch is its own moment and the caret says where it was.
+				// Switching tabs moves the caret, so a burst carried across a
+				// click must not keep pointing where it started.
+				focus: caretWithin(stretch, caretTrack) ?? candidate.focus,
+				trigger: "typing",
+			};
+			regions.push(region);
+			occupiedSpans.push(region);
+		}
 	}
 
-	return { regions, burstsLimitedByClick };
+	return { regions, burstsApplied, burstsLimitedByClick };
 }
 
 export function buildInteractionZoomSuggestions(params: {
@@ -550,10 +605,14 @@ export function buildInteractionZoomSuggestions(params: {
 		const typingRegions = buildTypingRegions({
 			typingCandidates,
 			occupiedSpans: reserved,
+			caretTrack,
 			totalMs,
 			padMs,
 		});
-		typingSummary.burstsApplied += typingRegions.regions.length;
+		// Bursts, not regions: one burst carried across a click makes several
+		// regions, and a count that exceeded the total it is a fraction of
+		// would be worse than no count.
+		typingSummary.burstsApplied += typingRegions.burstsApplied;
 		typingSummary.burstsLimitedByClick += typingRegions.burstsLimitedByClick;
 		suggestions.push(...typingRegions.regions);
 	}

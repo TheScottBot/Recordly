@@ -3,6 +3,7 @@ import type { Span } from "dnd-timeline";
 import { useCallback, useEffect, useMemo } from "react";
 import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion, ZoomTrigger } from "../../../types";
 import { buildInteractionZoomSuggestions } from "../../zoomSuggestionUtils";
+import { describeTypingSuggestionOutcome } from "../../typingSuggestionMessage";
 import { timelineNotifications } from "../utils/timelineNotifications";
 
 interface UseTimelineZoomActionsParams {
@@ -18,6 +19,7 @@ interface UseTimelineZoomActionsParams {
 	cursorTelemetry: CursorTelemetryPoint[];
 	typingEvents?: TypingEvent[];
 	caretTrack?: readonly CaretSample[];
+	caretTrackTruncated?: boolean;
 	options: {
 		disableSuggestedZooms: boolean;
 	};
@@ -33,6 +35,7 @@ export function useTimelineZoomActions({
 	cursorTelemetry,
 	typingEvents,
 	caretTrack,
+	caretTrackTruncated,
 	options,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
@@ -181,8 +184,16 @@ export function useTimelineZoomActions({
 			onZoomSuggested({ start: region.start, end: region.end }, region.focus, region.trigger);
 		}
 
+		// The engine has always counted what the typing path did and nobody has
+		// ever been told. Silence where everything worked, a sentence only when
+		// something did not, so the detail means something when it appears.
+		const typingOutcome = describeTypingSuggestionOutcome(
+			result.typing,
+			caretTrackTruncated === true,
+		);
 		timelineNotifications.success(
 			`Added ${result.suggestions.length} interaction-based zoom suggestion${result.suggestions.length === 1 ? "" : "s"}`,
+			typingOutcome ?? undefined,
 		);
 	}, [
 		videoDuration,
@@ -194,6 +205,7 @@ export function useTimelineZoomActions({
 		caretTrack,
 		defaultRegionDurationMs,
 		zoomRegions,
+		caretTrackTruncated,
 	]);
 
 	useEffect(() => {

@@ -111,6 +111,7 @@ import {
 	selectedSource,
 	setActiveCursorSamples,
 	setActiveCaretSamples,
+	setCaretTrackTruncated,
 	setActiveTypingEvents,
 	setPendingCaretSamples,
 	setPendingTypingEvents,
@@ -1897,6 +1898,7 @@ export function registerRecordingHandlers(
 			setPendingTypingEvents([]);
 			setActiveCaretSamples([]);
 			setPendingCaretSamples([]);
+			setCaretTrackTruncated(false);
 			setCursorCaptureStartTimeMs(Date.now());
 			resetCursorCaptureClock();
 			setLinuxCursorScreenPoint(null);
@@ -1993,7 +1995,7 @@ export function registerRecordingHandlers(
 	ipcMain.handle("get-typing-telemetry", async (_, videoPath?: string) => {
 		const targetVideoPath = normalizeVideoSourcePath(videoPath ?? currentVideoPath);
 		if (!targetVideoPath) {
-			return { success: true, events: [], caretSamples: [] };
+			return { success: true, events: [], caretSamples: [], caretTrackTruncated: false };
 		}
 
 		const sidecarPath = getTypingTelemetryPathForVideo(targetVideoPath);
@@ -2015,15 +2017,21 @@ export function registerRecordingHandlers(
 					error: sidecar.reason,
 					events: [],
 					caretSamples: [],
+					caretTrackTruncated: false,
 				};
 			}
 
-			return { success: true, events: sidecar.events, caretSamples: sidecar.caretSamples };
+			return {
+				success: true,
+				events: sidecar.events,
+				caretSamples: sidecar.caretSamples,
+				caretTrackTruncated: sidecar.caretTrackTruncated,
+			};
 		} catch (error) {
 			const nodeError = error as NodeJS.ErrnoException;
 			// No file means the recording held no typing, which is ordinary.
 			if (nodeError.code === "ENOENT") {
-				return { success: true, events: [], caretSamples: [] };
+				return { success: true, events: [], caretSamples: [], caretTrackTruncated: false };
 			}
 			console.error("Failed to load typing telemetry:", error);
 			return {
@@ -2032,6 +2040,7 @@ export function registerRecordingHandlers(
 				error: String(error),
 				events: [],
 				caretSamples: [],
+				caretTrackTruncated: false,
 			};
 		}
 	});

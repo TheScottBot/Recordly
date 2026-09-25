@@ -33,6 +33,7 @@ interface UseTimelineEditorRuntimeParams {
 	cursorTelemetry: CursorTelemetryPoint[];
 	typingEvents?: TypingEvent[];
 	caretTrack?: readonly CaretSample[];
+	caretTrackTruncated?: boolean;
 	autoSuggestZoomsTrigger: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	disableSuggestedZooms: boolean;
@@ -85,6 +86,7 @@ export function useTimelineEditorRuntime({
 	cursorTelemetry,
 	typingEvents,
 	caretTrack,
+	caretTrackTruncated,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
 	disableSuggestedZooms,
@@ -222,6 +224,7 @@ export function useTimelineEditorRuntime({
 		cursorTelemetry,
 		typingEvents,
 		caretTrack,
+		caretTrackTruncated,
 		options: { disableSuggestedZooms },
 		autoSuggestZoomsTrigger,
 		onAutoSuggestZoomsConsumed,

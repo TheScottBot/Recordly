@@ -27,12 +27,14 @@ vi.mock("../utils", () => ({
 
 import {
 	activeTypingEvents,
+	caretTrackTruncated,
 	setActiveCaretSamples,
 	setActiveTypingEvents,
+	setCaretTrackTruncated,
 	setPendingCaretSamples,
 	setPendingTypingEvents,
 } from "../state";
-import { pushCaretSample } from "./caretTelemetry";
+import { MAX_CARET_SAMPLES, pushCaretSample } from "./caretTelemetry";
 import {
 	parseTypingTelemetrySidecar,
 	persistPendingTypingTelemetry,
@@ -102,15 +104,17 @@ describe("typing telemetry store", () => {
 			status: "ok",
 			version: 1,
 			events: [{ timeMs: 900, keyProducesCharacter: true }],
-			// Version 1 predates the caret track, so it always reads as empty.
+			// Version 1 predates both, so it reads as an empty track that was
+			// never cut short.
 			caretSamples: [],
+			caretTrackTruncated: false,
 		});
 	});
 
 	it("refuses an unsupported version and says why", () => {
-		// 2 moved out of this list when the caret track was added; 3 is the
-		// next version that does not exist yet.
-		for (const unsupportedVersion of [0, 3, undefined, "1", null]) {
+		// 2 moved out of this list when the caret track was added, and 3 when
+		// the truncation flag did; 4 is the next version that does not exist.
+		for (const unsupportedVersion of [0, 4, undefined, "1", null]) {
 			expect(
 				parseTypingTelemetrySidecar({ version: unsupportedVersion, events: [] }),
 			).toEqual({
@@ -213,7 +217,7 @@ describe("the caret track in the sidecar", () => {
 		);
 
 		const written = JSON.parse(writeFile.mock.calls[0][1] as string);
-		expect(written.version).toBe(2);
+		expect(written.version).toBe(3);
 		expect(written.caretSamples).toEqual([{ timeMs: 12, cx: 0.5, cy: 0.5 }]);
 	});
 
@@ -260,5 +264,95 @@ describe("carrying the caret track to disk", () => {
 		await persistPendingTypingTelemetry("/tmp/recording.webm");
 
 		expect(writeFile).not.toHaveBeenCalled();
+	});
+});
+
+describe("a caret track that ran into the sample cap says so", () => {
+	beforeEach(() => {
+		writeFile.mockReset();
+		rm.mockReset();
+		setActiveTypingEvents([]);
+		setPendingTypingEvents([]);
+		setActiveCaretSamples([]);
+		setPendingCaretSamples([]);
+		setCaretTrackTruncated(false);
+	});
+
+	/**
+	 * A track that ran out looks exactly like a track that ended, and the zoom
+	 * simply stops following. Without this the difference is invisible to
+	 * everyone, including whoever is asked to explain it.
+	 */
+	it("writes the flag when the cap discarded something", async () => {
+		setCaretTrackTruncated(true);
+		await writeTypingTelemetry(
+			"/tmp/recording.webm",
+			[{ timeMs: 10, keyProducesCharacter: true }],
+			[{ timeMs: 12, cx: 0.5, cy: 0.5 }],
+			true,
+		);
+
+		const written = JSON.parse(writeFile.mock.calls[0][1] as string);
+		expect(written.version).toBe(3);
+		expect(written.caretTrackTruncated).toBe(true);
+	});
+
+	it("leaves the flag out entirely when nothing was discarded", async () => {
+		await writeTypingTelemetry(
+			"/tmp/recording.webm",
+			[{ timeMs: 10, keyProducesCharacter: true }],
+			[{ timeMs: 12, cx: 0.5, cy: 0.5 }],
+			false,
+		);
+
+		const written = JSON.parse(writeFile.mock.calls[0][1] as string);
+		expect(written).not.toHaveProperty("caretTrackTruncated");
+	});
+
+	it("reads the flag back", () => {
+		const result = parseTypingTelemetrySidecar({
+			version: 3,
+			events: [{ timeMs: 10 }],
+			caretSamples: [{ timeMs: 12, cx: 0.5, cy: 0.5 }],
+			caretTrackTruncated: true,
+		});
+
+		expect(result.status).toBe("ok");
+		expect(result.caretTrackTruncated).toBe(true);
+	});
+
+	it("treats anything but exactly true as not truncated, including a version that predates it", () => {
+		for (const stored of ["true", 1, undefined, null, 0, {}]) {
+			const result = parseTypingTelemetrySidecar({
+				version: 3,
+				events: [{ timeMs: 10 }],
+				caretTrackTruncated: stored,
+			});
+
+			expect(result.status === "ok" && result.caretTrackTruncated).toBe(false);
+		}
+
+		const versionTwo = parseTypingTelemetrySidecar({ version: 2, events: [{ timeMs: 10 }] });
+		expect(versionTwo.status === "ok" && versionTwo.caretTrackTruncated).toBe(false);
+	});
+
+	it("records that the cap discarded a sample, rather than dropping it quietly", () => {
+		setActiveCaretSamples(
+			Array.from({ length: MAX_CARET_SAMPLES }, (_unused, index) => ({
+				timeMs: index,
+				cx: 0.5,
+				cy: 0.5,
+			})),
+		);
+
+		pushCaretSample({ timeMs: MAX_CARET_SAMPLES, cx: 0.5, cy: 0.5 });
+
+		expect(caretTrackTruncated).toBe(true);
+	});
+
+	it("does not claim truncation while the track is still within the cap", () => {
+		pushCaretSample({ timeMs: 1, cx: 0.5, cy: 0.5 });
+
+		expect(caretTrackTruncated).toBe(false);
 	});
 });

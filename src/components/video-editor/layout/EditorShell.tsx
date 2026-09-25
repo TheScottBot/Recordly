@@ -239,6 +239,7 @@ export function EditorShell(props: Props) {
 					normalizedCursorTelemetry={cursor.normalizedCursorTelemetry}
 					typingEvents={cursor.typingEvents}
 					caretTrack={cursor.caretTrack}
+					caretTrackTruncated={cursor.caretTrackTruncated}
 					autoSuggestZoomsTrigger={ui.autoSuggestZoomsTrigger}
 					handleAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 					disableSuggestedZooms={!appearance.autoApplyFreshRecordingAutoZooms}

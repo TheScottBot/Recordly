@@ -170,7 +170,7 @@ describe("typing bursts as their own suggestions", () => {
 		});
 	});
 
-	it("cuts a typing region short at the next click's region rather than moving it", () => {
+	it("gives way to the next click's region and picks up again after it", () => {
 		const result = buildInteractionZoomSuggestions({
 			cursorTelemetry: withMoves(
 				[makeClick(5_000, 0.3, 0.3), makeClick(9_000, 0.7, 0.7)],
@@ -181,12 +181,18 @@ describe("typing bursts as their own suggestions", () => {
 			defaultDurationMs: 2_000,
 		});
 
-		// Both click regions are exactly what they would be without any typing.
+		// Both click regions are exactly what they would be without any typing,
+		// and the typing resumes on the far side of the second one rather than
+		// stopping there. A burst used to end at the first click it met, which
+		// silenced every word typed after it.
 		expect(result.suggestions).toEqual([
 			CLICK_REGION,
 			{ start: 5_500, end: 8_500, focus: CLICK_FOCUS, trigger: "typing" },
 			{ start: 8_500, end: 9_500, focus: { cx: 0.7, cy: 0.7 } },
+			{ start: 9_500, end: 13_350, focus: CLICK_FOCUS, trigger: "typing" },
 		]);
+		// One burst, two regions. The count is of bursts, and the time under
+		// the click region is still time the typing lost.
 		expect(result.typing).toMatchObject({ burstsApplied: 1, burstsLimitedByClick: 1 });
 	});
 
@@ -230,7 +236,7 @@ describe("typing bursts as their own suggestions", () => {
 		});
 	});
 
-	it("cuts a typing region short at a reserved span", () => {
+	it("gives way to a reserved span and picks up again after it", () => {
 		const result = buildInteractionZoomSuggestions({
 			cursorTelemetry: CLICK_AT_5000,
 			typingEvents: makeTypingRun(5_500, 40, 150),
@@ -242,6 +248,7 @@ describe("typing bursts as their own suggestions", () => {
 		expect(result.suggestions).toEqual([
 			CLICK_REGION,
 			{ start: 5_500, end: 10_000, focus: CLICK_FOCUS, trigger: "typing" },
+			{ start: 11_000, end: 11_850, focus: CLICK_FOCUS, trigger: "typing" },
 		]);
 		expect(result.typing).toMatchObject({ burstsApplied: 1, burstsLimitedByClick: 1 });
 	});
@@ -357,5 +364,158 @@ describe("where a typing region begins", () => {
 
 		// Twelve keystrokes 120 ms apart put the last at 10_320.
 		expect(typingRegion?.end).toBe(10_820);
+	});
+});
+
+describe("typing that continues past a click", () => {
+	/**
+	 * The author switched browser tabs and carried on typing, three times in
+	 * one recording on 25 September 2026, and every burst after the first
+	 * click got no zoom. Their typing ran from 12797 to 32402 ms and produced
+	 * a single region ending at 17515, where the first click region began.
+	 *
+	 * A burst was shrunk to the first free stretch ahead of it and never
+	 * split, so one click in the middle of a long burst silenced everything
+	 * after it. Switching tabs is a click, so this is the ordinary case of
+	 * working across two windows, not an edge case.
+	 */
+	it("gives every free stretch of a long burst its own region", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves(
+				[makeClick(5_000, 0.3, 0.3), makeClick(12_000, 0.6, 0.3)],
+				TOTAL_MS,
+			),
+			typingEvents: makeTypingRun(5_500, 120, 150),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const typingRegions = result.suggestions.filter((region) => region.trigger === "typing");
+
+		// One before the second click's region, one after it.
+		expect(typingRegions).toHaveLength(2);
+		expect(typingRegions[0].end).toBeLessThanOrEqual(11_500);
+		expect(typingRegions[1].start).toBeGreaterThanOrEqual(12_500);
+	});
+
+	it("never overlaps the click regions it makes room for", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves(
+				[
+					makeClick(5_000, 0.3, 0.3),
+					makeClick(12_000, 0.6, 0.3),
+					makeClick(18_000, 0.7, 0.4),
+				],
+				TOTAL_MS,
+			),
+			typingEvents: makeTypingRun(5_500, 160, 150),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const clickRegions = result.suggestions.filter((region) => region.trigger !== "typing");
+		const typingRegions = result.suggestions.filter((region) => region.trigger === "typing");
+
+		for (const typing of typingRegions) {
+			for (const click of clickRegions) {
+				const overlaps = typing.start < click.end && typing.end > click.start;
+				expect(overlaps).toBe(false);
+			}
+		}
+		expect(typingRegions.length).toBeGreaterThan(1);
+	});
+
+	/**
+	 * Each stretch is its own moment and the caret says where it was. Switching
+	 * tabs moves the caret, so a burst carried across a click must not keep
+	 * pointing where it started.
+	 */
+	it("takes each stretch's focus from the caret inside it", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves(
+				[makeClick(5_000, 0.3, 0.3), makeClick(12_000, 0.6, 0.3)],
+				TOTAL_MS,
+			),
+			typingEvents: makeTypingRun(5_500, 120, 150),
+			caretTrack: [
+				{ timeMs: 5_600, cx: 0.2, cy: 0.2 },
+				{ timeMs: 13_000, cx: 0.8, cy: 0.6 },
+			],
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const typingRegions = result.suggestions.filter((region) => region.trigger === "typing");
+
+		expect(typingRegions[0].focus).toEqual({ cx: 0.2, cy: 0.2 });
+		expect(typingRegions[1].focus).toEqual({ cx: 0.8, cy: 0.6 });
+	});
+
+	it("drops a stretch too short to be worth a zoom", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves(
+				[makeClick(5_000, 0.3, 0.3), makeClick(6_000, 0.6, 0.3)],
+				TOTAL_MS,
+			),
+			typingEvents: makeTypingRun(5_400, 30, 150),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const typingRegions = result.suggestions.filter((region) => region.trigger === "typing");
+
+		for (const region of typingRegions) {
+			expect(region.end - region.start).toBeGreaterThanOrEqual(400);
+		}
+	});
+});
+
+describe("the counters still describe bursts once a burst can make several regions", () => {
+	/**
+	 * Splitting a burst across the gaps between clicks made `burstsApplied`
+	 * count regions rather than bursts, so it read 6 against 2 detected on the
+	 * author's recording of 25 September 2026. A count that exceeds the total
+	 * it is a fraction of is worse than no count.
+	 */
+	it("counts a burst split into several regions as one burst", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves(
+				[
+					makeClick(5_000, 0.3, 0.3),
+					makeClick(12_000, 0.6, 0.3),
+					makeClick(18_000, 0.7, 0.4),
+				],
+				TOTAL_MS,
+			),
+			typingEvents: makeTypingRun(5_500, 160, 150),
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		const typingRegions = result.suggestions.filter((region) => region.trigger === "typing");
+
+		expect(typingRegions.length).toBeGreaterThan(1);
+		expect(result.typing?.burstsDetected).toBe(1);
+		expect(result.typing?.burstsApplied).toBe(1);
+	});
+
+	it("never reports more bursts applied than were detected", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: withMoves(
+				[
+					makeClick(5_000, 0.3, 0.3),
+					makeClick(9_000, 0.6, 0.3),
+					makeClick(14_000, 0.7, 0.4),
+				],
+				TOTAL_MS,
+			),
+			typingEvents: [...makeTypingRun(5_500, 80, 150), ...makeTypingRun(20_000, 20, 150)],
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 2_000,
+		});
+
+		expect(result.typing?.burstsApplied).toBeLessThanOrEqual(
+			result.typing?.burstsDetected ?? 0,
+		);
 	});
 });

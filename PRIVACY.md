@@ -72,6 +72,11 @@ rebuilds every entry from scratch when the file is read or written, so a
 field that has no business being there cannot survive a round trip however
 it got in.
 
+The file may also carry one flag saying the track ran into its own size
+limit and was cut short. It records that some of the track is missing, not
+anything about you, and it exists so that a zoom which stops following the
+text can be explained rather than looking like a fault.
+
 Sampling starts on your first key press and stops about two and a half
 seconds after your last, so a recording is not sampled while you are not
 typing. A position is recorded roughly four times a second, and only when it

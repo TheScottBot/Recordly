@@ -47,10 +47,16 @@ export interface CaretSample {
 	cy: number;
 }
 
-/** Version 2 added `caretSamples`. A version 1 file is still read, and has none. */
-export const TYPING_TELEMETRY_VERSION = 2;
+/**
+ * Version 2 added `caretSamples`. Version 3 added `caretTrackTruncated`, so a
+ * track that ran into the sample cap can say so instead of looking complete:
+ * a zoom that stops following because the track ran out is otherwise
+ * indistinguishable from a zoom that is broken. Earlier versions are still
+ * read, and carry neither.
+ */
+export const TYPING_TELEMETRY_VERSION = 3;
 
-export const SUPPORTED_TYPING_TELEMETRY_VERSIONS = [1, 2] as const;
+export const SUPPORTED_TYPING_TELEMETRY_VERSIONS = [1, 2, 3] as const;
 
 const supportedTypingTelemetryVersionSet: ReadonlySet<number> = new Set(
 	SUPPORTED_TYPING_TELEMETRY_VERSIONS,

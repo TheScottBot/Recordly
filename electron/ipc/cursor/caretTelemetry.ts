@@ -10,7 +10,12 @@
  */
 
 import type { CaretSample } from "../../../src/lib/typingTelemetryContract";
-import { activeCaretSamples, setActiveCaretSamples } from "../state";
+import {
+	activeCaretSamples,
+	caretTrackTruncated,
+	setActiveCaretSamples,
+	setCaretTrackTruncated,
+} from "../state";
 import { getScreen } from "../utils";
 import { locateDipPointInCapturedArea } from "./telemetry";
 
@@ -58,6 +63,13 @@ export function pushCaretSample(sample: CaretSample) {
 
 	if (activeCaretSamples.length > MAX_CARET_SAMPLES) {
 		activeCaretSamples.shift();
+		// Said once and carried to the sidecar. A track that ran out looks
+		// exactly like a track that ended, and the zoom simply stops
+		// following, so the difference has to be recorded where someone can
+		// find it later.
+		if (!caretTrackTruncated) {
+			setCaretTrackTruncated(true);
+		}
 	}
 }
 

@@ -41,6 +41,7 @@ export interface TimelineEditorProps {
 	cursorTelemetry?: CursorTelemetryPoint[];
 	typingEvents?: TypingEvent[];
 	caretTrack?: readonly CaretSample[];
+	caretTrackTruncated?: boolean;
 	autoSuggestZoomsTrigger?: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	disableSuggestedZooms?: boolean;
@@ -126,6 +127,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			cursorTelemetry = [],
 			typingEvents = [],
 			caretTrack = [],
+			caretTrackTruncated = false,
 			autoSuggestZoomsTrigger = 0,
 			onAutoSuggestZoomsConsumed,
 			disableSuggestedZooms = false,
@@ -367,6 +369,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			cursorTelemetry,
 			typingEvents,
 			caretTrack,
+			caretTrackTruncated,
 			autoSuggestZoomsTrigger,
 			onAutoSuggestZoomsConsumed,
 			disableSuggestedZooms,
